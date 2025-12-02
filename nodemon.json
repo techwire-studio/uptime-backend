@@ -1,0 +1,11 @@
+{
+  "watch": [".", ".env"],
+  "ext": "ts,json",
+  "ignore": ["node_modules", "dist", "*.test.ts", "*.spec.ts"],
+  "exec": "tsx index.ts",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 1000,
+  "legacyWatch": false
+}

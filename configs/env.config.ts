@@ -1,14 +1,20 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import logger from '@/utils/logger';
-import { zEnumFromEnv, zNumberFromString, zURL } from '@/validations/common';
+import {
+  zEnumFromEnv,
+  zNumberFromString,
+  zRequiredString,
+  zURL
+} from '@/validations/common';
 
 dotenv.config();
 
 const envSchema = z.object({
   PORT: zNumberFromString('PORT must be a valid number'),
   NODE_ENV: zEnumFromEnv(['development', 'production', 'test']),
-  CLIENT_URL: zURL()
+  CLIENT_URL: zURL(),
+  DATABASE_URL: zRequiredString('DATABASE_URL')
 });
 
 const createEnv = () => {

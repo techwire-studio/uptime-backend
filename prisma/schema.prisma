@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------
+// USERS
+// ----------------------------
+model users {
+  id                String              @id @default(uuid())
+  email             String              @unique
+  password_hash     String
+  created_at        DateTime            @default(now())
+  workspaces        workspaces[]
+  workspace_members workspace_members[]
+}
+
+// ----------------------------
+// WORKSPACES
+// ----------------------------
+model workspaces {
+  id             String              @id @default(uuid())
+  owner_id       String
+  name           String
+  created_at     DateTime            @default(now())
+  owner          users               @relation(fields: [owner_id], references: [id])
+  members        workspace_members[]
+  monitors       monitors[]
+  alert_channels alert_channels[]
+}
+
+// ----------------------------
+// WORKSPACE MEMBERS
+// ----------------------------
+model workspace_members {
+  id           String     @id @default(uuid())
+  workspace_id String
+  user_id      String
+  role         String
+  created_at   DateTime   @default(now())
+  workspace    workspaces @relation(fields: [workspace_id], references: [id])
+  user         users      @relation(fields: [user_id], references: [id])
+}
+
+// ----------------------------
+// MONITORS
+// ----------------------------
+model monitors {
+  id                    String           @id @default(uuid())
+  workspace_id          String
+  name                  String
+  url                   String?
+  type                  String
+  interval_seconds      Int
+  timeout_ms            Int
+  expected_status       Int?
+  check_regions         String?
+  status                String
+  last_response_time_ms Int?
+  last_checked_at       DateTime?
+  next_run_at           DateTime?
+  consecutive_failures  Int
+  max_retries           Int
+  created_at            DateTime         @default(now())
+  updated_at            DateTime         @updatedAt
+  workspace             workspaces       @relation(fields: [workspace_id], references: [id])
+  checks                monitor_checks[]
+  incidents             incidents[]
+  alert_rules           alert_rules[]
+  alerts_sent           alerts_sent[]
+}
+
+// ----------------------------
+// MONITOR CHECKS
+// ----------------------------
+model monitor_checks {
+  id                  BigInt   @id @default(autoincrement())
+  monitor_id          String
+  checked_at          DateTime
+  status              String
+  response_time_ms    Int?
+  http_status         Int?
+  success             Boolean
+  error_message       String?
+  dns_lookup_ms       Int?
+  ssl_handshake_ms    Int?
+  connect_ms          Int?
+  download_ms         Int?
+  response_size_bytes Int?
+  response_headers    Json?
+  response_body       String?
+  monitor             monitors @relation(fields: [monitor_id], references: [id])
+
+  @@index([monitor_id, checked_at])
+}
+
+// ----------------------------
+// INCIDENTS
+// ----------------------------
+model incidents {
+  id               String        @id @default(uuid())
+  monitor_id       String
+  started_at       DateTime
+  resolved_at      DateTime?
+  duration_seconds Int?
+  reason           String?
+  created_at       DateTime      @default(now())
+  monitor          monitors      @relation(fields: [monitor_id], references: [id])
+  alerts           alerts_sent[]
+}
+
+// ----------------------------
+// ALERT RULES
+// ----------------------------
+model alert_rules {
+  id                    String   @id @default(uuid())
+  monitor_id            String
+  alert_type            String
+  enabled               Boolean
+  notify_after_failures Int
+  created_at            DateTime @default(now())
+  monitor               monitors @relation(fields: [monitor_id], references: [id])
+}
+
+// ----------------------------
+// ALERT CHANNELS
+// ----------------------------
+model alert_channels {
+  id           String        @id @default(uuid())
+  workspace_id String
+  type         String
+  destination  String
+  created_at   DateTime      @default(now())
+  workspace    workspaces    @relation(fields: [workspace_id], references: [id])
+  alerts       alerts_sent[]
+}
+
+// ----------------------------
+// ALERTS SENT
+// ----------------------------
+model alerts_sent {
+  id          BigInt         @id @default(autoincrement())
+  monitor_id  String
+  channel_id  String
+  incident_id String?
+  sent_at     DateTime
+  alert_type  String
+  message     String
+  monitor     monitors       @relation(fields: [monitor_id], references: [id])
+  channel     alert_channels @relation(fields: [channel_id], references: [id])
+  incident    incidents?     @relation(fields: [incident_id], references: [id])
+}

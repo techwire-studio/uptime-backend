@@ -31,6 +31,7 @@ model workspaces {
   members        workspace_members[]
   monitors       monitors[]
   alert_channels alert_channels[]
+  statusPages    status_pages[]
 }
 
 // ----------------------------
@@ -53,20 +54,23 @@ model monitors {
   id                    String           @id @default(uuid())
   workspace_id          String
   name                  String
-  url                   String?
+  url                   String
   type                  String
-  interval_seconds      Int
-  timeout_ms            Int
-  expected_status       Int?
-  check_regions         String?
-  status                String
+  interval_seconds      Int              @default(60)
+  timeout_ms            Int              @default(5000)
+  expected_status       Int
+  check_regions         String
+  status                String           @default("healthy")
   last_response_time_ms Int?
+  tags                  String[]
   last_checked_at       DateTime?
-  next_run_at           DateTime?
-  consecutive_failures  Int
-  max_retries           Int
+  next_run_at           DateTime
+  consecutive_failures  Int              @default(0)
+  max_retries           Int              @default(3)
   created_at            DateTime         @default(now())
   updated_at            DateTime         @updatedAt
+  is_active             Boolean          @default(true)
+  status_pages          status_pages[]   @relation("StatusPageMonitors")
   workspace             workspaces       @relation(fields: [workspace_id], references: [id])
   checks                monitor_checks[]
   incidents             incidents[]
@@ -78,22 +82,25 @@ model monitors {
 // MONITOR CHECKS
 // ----------------------------
 model monitor_checks {
-  id                  BigInt   @id @default(autoincrement())
-  monitor_id          String
-  checked_at          DateTime
-  status              String
-  response_time_ms    Int?
-  http_status         Int?
-  success             Boolean
-  error_message       String?
-  dns_lookup_ms       Int?
-  ssl_handshake_ms    Int?
-  connect_ms          Int?
-  download_ms         Int?
-  response_size_bytes Int?
-  response_headers    Json?
-  response_body       String?
-  monitor             monitors @relation(fields: [monitor_id], references: [id])
+  id                      String      @id @default(uuid())
+  monitor_id              String
+  checked_at              DateTime
+  status                  String
+  response_time_ms        Int?
+  http_status             Int?
+  success                 Boolean
+  error_message           String?
+  dns_lookup_ms           Int?
+  ssl_handshake_ms        Int?
+  connect_ms              Int?
+  download_ms             Int?
+  response_size_bytes     Int?
+  response_headers        Json?
+  request_headers         Json?
+  response_body           String?
+  monitor                 monitors    @relation(fields: [monitor_id], references: [id])
+  incident_check          incidents[] @relation("IncidentCheck")
+  incident_resolved_check incidents[] @relation("IncidentResolvedCheck")
 
   @@index([monitor_id, checked_at])
 }
@@ -102,15 +109,19 @@ model monitor_checks {
 // INCIDENTS
 // ----------------------------
 model incidents {
-  id               String        @id @default(uuid())
-  monitor_id       String
-  started_at       DateTime
-  resolved_at      DateTime?
-  duration_seconds Int?
-  reason           String?
-  created_at       DateTime      @default(now())
-  monitor          monitors      @relation(fields: [monitor_id], references: [id])
-  alerts           alerts_sent[]
+  id                String          @id @default(uuid())
+  monitor_id        String
+  check_id          String?
+  resolved_check_id String?
+  started_at        DateTime
+  resolved_at       DateTime?
+  duration_seconds  Int?
+  reason            String?
+  created_at        DateTime        @default(now())
+  monitor           monitors        @relation(fields: [monitor_id], references: [id])
+  check             monitor_checks? @relation("IncidentCheck", fields: [check_id], references: [id])
+  resolved_check    monitor_checks? @relation("IncidentResolvedCheck", fields: [resolved_check_id], references: [id])
+  alerts            alerts_sent[]
 }
 
 // ----------------------------
@@ -143,14 +154,30 @@ model alert_channels {
 // ALERTS SENT
 // ----------------------------
 model alerts_sent {
-  id          BigInt         @id @default(autoincrement())
+  id          String         @id @default(uuid())
   monitor_id  String
   channel_id  String
   incident_id String?
   sent_at     DateTime
   alert_type  String
-  message     String
+  message     String?
   monitor     monitors       @relation(fields: [monitor_id], references: [id])
   channel     alert_channels @relation(fields: [channel_id], references: [id])
   incident    incidents?     @relation(fields: [incident_id], references: [id])
+}
+
+// -------------------------------------
+// STATUS PAGES
+// -------------------------------------
+model status_pages {
+  id            String     @id @default(uuid())
+  workspace_id  String
+  name          String
+  custom_domain String?    @unique
+  access_level  String
+  status        String
+  updated_at    DateTime   @updatedAt
+  created_at    DateTime   @default(now())
+  workspace     workspaces @relation(fields: [workspace_id], references: [id])
+  monitors      monitors[] @relation("StatusPageMonitors")
 }

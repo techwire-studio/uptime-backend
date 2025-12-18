@@ -4,17 +4,20 @@ import cors from 'cors';
 import monitorRoutes from '@/routes/monitor';
 import incidentRoutes from '@/routes/incident';
 import statusRoutes from '@/routes/status';
+import workspacesRoutes from '@/routes/workspace';
+import usersRoutes from '@/routes/user';
 import logger from '@/utils/logger';
 import { errorHandler } from '@/middlewares/error';
 import { sendToQueue } from '@/services/queue';
 import { startWorker } from '@/services/worker';
 import { getDueMonitors } from '@/controllers/monitor';
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from '@/services/auth';
 
 const app = express();
 const PORT = env.PORT || 8000;
 
 // Body Parser Middleware
-app.use(express.json({ limit: '10kb' })); // Body limit is 10kb
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // CORS Configuration
@@ -22,22 +25,18 @@ app.use(
   cors({
     origin: env.CLIENT_URL || 'http://localhost:5173',
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'device-remember-token',
-      'Access-Control-Allow-Origin',
-      'Origin',
-      'Accept'
-    ]
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
   })
 );
 
+app.all('/api/auth/*splat', toNodeHandler(auth));
+
+app.use(express.json({ limit: '10kb' })); // Body limit is 10kb
 app.use('/api/v1/monitors', monitorRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/status', statusRoutes);
+app.use('/api/v1/users', usersRoutes);
+app.use('/api/v1/workspaces', workspacesRoutes);
 
 async function schedulerLoop() {
   setInterval(async () => {

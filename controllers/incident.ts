@@ -104,19 +104,23 @@ export const getIncidentById: RequestHandler = catchAsync(
 );
 
 /**
- * @route GET /incidents
+ * @route GET workspaces/:workspaceId/incidents
  * @description Get paginated list of incidents including monitor + check details
  * @queryParam {number} [page=1] - Page number
  * @queryParam {number} [limit=10] - Number of items per page
  * @returns {Array} List of incidents with monitor name, url, checks, timestamps
  */
-export const getAllIncidents: RequestHandler = catchAsync(
+export const getWorkspaceIncidents: RequestHandler = catchAsync(
   async (request, response) => {
     const page = parseInt(request.query.page as string) || 1;
     const limit = parseInt(request.query.limit as string) || 10;
     const skip = (page - 1) * limit;
+    const { workspaceId } = request.params as { workspaceId: string };
 
     const incidents = await prisma.incidents.findMany({
+      where: {
+        workspace_id: workspaceId
+      },
       skip,
       take: limit,
       include: {

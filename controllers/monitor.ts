@@ -7,10 +7,13 @@ import { catchAsync } from '@/middlewares/error';
 import type { Request, RequestHandler, Response } from 'express';
 import {
   CreateMonitorSchemaType,
+  MonitorNotifyEventEnum,
   MonitorOverallStatus,
+  MonitorTypeEnum,
   UpdateMonitorSchemaType
 } from '@/types/monitor';
 import { AlertServicesEnum } from '@/types/alert';
+import { getWorkspaceByUserId } from './workspace';
 
 /**
  * @route POST /monitors
@@ -21,41 +24,66 @@ export const createNewMonitor: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
     const payload = request.body as CreateMonitorSchemaType;
 
+    const workspaceId = await getWorkspaceByUserId(request.userId);
+    const wsId = workspaceId[0]?.id as string;
+
     const monitor = await prisma.monitors.create({
       data: {
-        workspace_id: '69ab2717-c9a7-4359-a254-91bcb0d12e12',
+        workspace_id: wsId,
         name: payload.name || payload.url,
         url: payload.url,
         tags: payload.tags,
-        type: 'http',
+        type: MonitorTypeEnum.HTTP,
         interval_seconds: payload.interval_seconds || 60,
         timeout_ms: payload.timeout_ms || 5000,
         expected_status: payload.expected_status || 200,
         check_regions: 'us-east-1,eu-west-1',
-        status: 'healthy',
+        status: MonitorOverallStatus.PREPARING,
         next_run_at: new Date(
           Date.now() + (payload.interval_seconds || 60) * 1000
         ),
         is_active: true,
         consecutive_failures: 0,
-        max_retries: 3
+        max_retries: 0
       }
     });
 
-    if (payload.alert_channels.email) {
-      await prisma.alert_rules.create({
-        data: {
+    if (payload.alert_channels?.email) {
+      await prisma.alert_rules.upsert({
+        where: {
+          monitor_id_alert_type: {
+            monitor_id: monitor.id,
+            alert_type: AlertServicesEnum.EMAIL
+          }
+        },
+        update: {
+          enabled: true,
+          events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+        },
+        create: {
+          workspace_id: wsId,
           alert_type: AlertServicesEnum.EMAIL,
           enabled: true,
-          notify_after_failures: 3,
+          events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN],
           monitor_id: monitor.id
         }
       });
 
-      await prisma.alert_channels.create({
-        data: {
-          workspace_id: '69ab2717-c9a7-4359-a254-91bcb0d12e12',
-          destination: 'anshkumar8710@gmail.com',
+      await prisma.alert_channels.upsert({
+        where: {
+          workspace_id_type_destination: {
+            workspace_id: wsId,
+            type: AlertServicesEnum.EMAIL,
+            destination: request.email
+          }
+        },
+        update: {
+          type: AlertServicesEnum.EMAIL,
+          destination: request.email
+        },
+        create: {
+          workspace_id: wsId,
+          destination: request.email,
           type: AlertServicesEnum.EMAIL
         }
       });
@@ -70,20 +98,25 @@ export const createNewMonitor: RequestHandler = catchAsync(
 );
 
 /**
- * @route GET /monitors
- * @description Get paginated list of monitors
+ * @route GET workspaces/:workspaceId/monitors
+ * @description Get paginated list of workspace monitors
  * @queryParam {number} [page=1] - Page number
  * @queryParam {number} [limit=10] - Number of items per page
  * @queryParam {string} [select] - Comma-separated fields to select
  * @returns {Array} List of monitors
  */
-export const getAllMonitors: RequestHandler = catchAsync(
+export const getWorkspaceMonitors: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
     const page = parseInt(request.query.page as string) || 1;
     const limit = parseInt(request.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
+    const { workspaceId } = request.params as { workspaceId: string };
+
     const monitors = await prisma.monitors.findMany({
+      where: {
+        workspace_id: workspaceId
+      },
       skip,
       take: limit,
       include: {
@@ -162,7 +195,6 @@ export const getDueMonitors = async () => {
     where: {
       next_run_at: { lte: new Date() },
       is_active: true,
-      id: '6b594b8a-e8df-46e0-809c-6db675ca4bb6',
       status: {
         not: MonitorOverallStatus.PAUSED
       }
@@ -311,7 +343,7 @@ export const resetMonitorStats: RequestHandler = catchAsync(
           next_run_at: new Date(Date.now() + 60 * 1000),
           is_active: true,
           consecutive_failures: 0,
-          max_retries: 3,
+          max_retries: 0,
           last_response_time_ms: null,
           last_checked_at: null
         }

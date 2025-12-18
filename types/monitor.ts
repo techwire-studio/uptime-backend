@@ -5,10 +5,16 @@ import {
 } from '@/validations/monitor';
 import z from 'zod';
 
+export enum MonitorTypeEnum {
+  HTTP = 'http',
+  HEARTBEAT = 'heartbeat'
+}
+
 export enum MonitorOverallStatus {
   HEALTHY = 'healthy',
   UNHEALTHY = 'unhealthy',
-  PAUSED = 'paused'
+  PAUSED = 'paused',
+  PREPARING = 'preparing'
 }
 
 export enum MonitorCheckStatus {
@@ -36,3 +42,10 @@ export type MonitorsType = monitors;
 export type CreateMonitorSchemaType = z.infer<typeof createMonitorSchema>;
 
 export type UpdateMonitorSchemaType = z.infer<typeof updateMonitorSchema>;
+
+export enum MonitorNotifyEventEnum {
+  UP = 'UP',
+  DOWN = 'DOWN',
+  SSL_EXPIRY = 'SSL_EXPIRY',
+  DOMAIN_EXPIRY = 'DOMAIN_EXPIRY'
+}

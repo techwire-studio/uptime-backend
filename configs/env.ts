@@ -15,6 +15,7 @@ export const envSchema = z.object({
   PORT: zNumberFromString('PORT must be a valid number'),
   NODE_ENV: zEnumFromEnv(['development', 'production', 'test']),
   CLIENT_URL: zURL(),
+  BASE_URL: zURL(),
 
   // Database & Messaging
   DATABASE_URL: zRequiredString('DATABASE_URL is required'),
@@ -36,7 +37,10 @@ export const envSchema = z.object({
   ),
   WHATSAPP_RECIPIENT_TEST_NUMBER: zRequiredString(
     'WHATSAPP_RECIPIENT_TEST_NUMBER is required'
-  )
+  ),
+
+  // Better Auth
+  BETTER_AUTH_SECRET: zRequiredString('  BETTER_AUTH_SECRET is required')
 });
 
 const createEnv = () => {

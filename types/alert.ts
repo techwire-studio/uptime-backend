@@ -5,6 +5,7 @@ export enum AlertTypesEnum {
 
 export enum AlertServicesEnum {
   EMAIL = 'email',
+  SMS = 'sms',
   WHATSAPP = 'whatsapp'
 }
 

@@ -3,11 +3,11 @@ import {
   createNewMonitor,
   getMonitorById,
   updateMonitorById,
-  getAllMonitors,
   deleteMonitors,
   resetMonitorStats,
   getMonitorsBySelect
 } from '@/controllers/monitor';
+import { authenticationMiddleware } from '@/middlewares/auth';
 import { validateRequestPayload } from '@/middlewares/validation';
 import {
   createMonitorSchema,
@@ -17,21 +17,22 @@ import express from 'express';
 
 const router = express.Router();
 
-router.get('/', getAllMonitors);
-router.get('/select', getMonitorsBySelect);
+router.get('/select', authenticationMiddleware, getMonitorsBySelect);
 router.post(
   '/new',
+  authenticationMiddleware,
   validateRequestPayload(createMonitorSchema),
   createNewMonitor
 );
 router.patch(
   '/:id',
+  authenticationMiddleware,
   validateRequestPayload(updateMonitorSchema),
   updateMonitorById
 );
-router.get('/:id', getMonitorById);
-router.delete('/', deleteMonitors);
+router.get('/:id', authenticationMiddleware, getMonitorById);
+router.delete('/', authenticationMiddleware, deleteMonitors);
 router.get('/:id/incidents', getIncidentByMonitorId);
-router.post('/reset-stats', resetMonitorStats);
+router.post('/reset-stats', authenticationMiddleware, resetMonitorStats);
 
 export default router;

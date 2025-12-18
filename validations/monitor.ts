@@ -17,7 +17,7 @@ export const createMonitorSchema = z.object({
   next_run_at: z.coerce.date().nullable().optional(),
   is_active: z.boolean().default(true),
   consecutive_failures: z.number().int().default(2),
-  max_retries: z.number().int().default(3),
+  max_retries: z.number().int().default(0),
   alert_channels: z.object({
     email: z.boolean().default(true),
     sms: z.boolean().default(false),

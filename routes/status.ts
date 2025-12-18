@@ -2,9 +2,9 @@ import {
   createStatusPage,
   deleteStatusPage,
   getStatusPageById,
-  getStatusPagesByWorkspace,
   updateStatusPage
 } from '@/controllers/status';
+import { authenticationMiddleware } from '@/middlewares/auth';
 import { validateRequestPayload } from '@/middlewares/validation';
 import {
   createStatusPageSchema,
@@ -14,18 +14,22 @@ import express from 'express';
 
 const router = express.Router();
 
-router.post(
-  '/',
-  validateRequestPayload(createStatusPageSchema),
-  createStatusPage
-);
-router.get('/workspace/:workspace_id', getStatusPagesByWorkspace);
-router.get('/:id', getStatusPageById);
-router.patch(
-  '/:id',
-  validateRequestPayload(updateStatusPageSchema),
-  updateStatusPage
-);
-router.delete('/:id', deleteStatusPage);
+router
+  .route('/')
+  .post(
+    authenticationMiddleware,
+    validateRequestPayload(createStatusPageSchema),
+    createStatusPage
+  );
+
+router
+  .route('/:id')
+  .get(getStatusPageById)
+  .patch(
+    authenticationMiddleware,
+    validateRequestPayload(updateStatusPageSchema),
+    updateStatusPage
+  )
+  .delete(authenticationMiddleware, deleteStatusPage);
 
 export default router;

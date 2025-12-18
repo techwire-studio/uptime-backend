@@ -144,3 +144,35 @@ export const runHttpMonitor = async (monitor: {
     };
   }
 };
+
+export async function sendHttp({
+  url,
+  payload,
+  headers
+}: {
+  url: string;
+  payload: unknown;
+  headers?: Record<string, string>;
+}): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Request failed: ${response.status} ${text}`);
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}

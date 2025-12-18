@@ -97,15 +97,15 @@ export const getStatusPageById: RequestHandler = catchAsync(
 );
 
 /**
- * @route GET /status/workspace/:workspace_id
+ * @route GET /workspace/:workspace_id/status-pages
  * @description Get all status pages for a workspace with linked monitors
  */
-export const getStatusPagesByWorkspace: RequestHandler = catchAsync(
+export const getWorkspaceStatusPages: RequestHandler = catchAsync(
   async (request, response) => {
-    const { workspace_id } = request.params as { workspace_id: string };
+    const { workspaceId } = request.params as { workspaceId: string };
 
     const statusPages = await prisma.status_pages.findMany({
-      where: { workspace_id },
+      where: { workspace_id: workspaceId },
       include: {
         _count: {
           select: { monitors: true }

@@ -11,22 +11,31 @@ import {
   updateStatusPageSchema
 } from '@/validations/status';
 import express from 'express';
+import multer from 'multer';
 
 const router = express.Router();
 
-router
-  .route('/')
-  .post(
-    authenticationMiddleware,
-    validateRequestPayload(createStatusPageSchema),
-    createStatusPage
-  );
+const upload = multer({ dest: 'uploads/' });
+
+router.route('/').post(
+  authenticationMiddleware,
+  upload.fields([
+    { name: 'logo', maxCount: 1 },
+    { name: 'favicon', maxCount: 1 }
+  ]),
+  validateRequestPayload(createStatusPageSchema),
+  createStatusPage
+);
 
 router
   .route('/:id')
   .get(getStatusPageById)
   .patch(
     authenticationMiddleware,
+    upload.fields([
+      { name: 'logo', maxCount: 1 },
+      { name: 'favicon', maxCount: 1 }
+    ]),
     validateRequestPayload(updateStatusPageSchema),
     updateStatusPage
   )

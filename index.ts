@@ -10,9 +10,10 @@ import logger from '@/utils/logger';
 import { errorHandler } from '@/middlewares/error';
 import { sendToQueue } from '@/services/queue';
 import { startWorker } from '@/services/worker';
-import { getDueMonitors } from '@/controllers/monitor';
+import { fetchAndLockDueMonitors } from '@/controllers/monitor';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from '@/services/auth';
+import { sendSuccessResponse } from '@/utils/responseHandler';
 
 const app = express();
 const PORT = env.PORT || 8000;
@@ -23,9 +24,9 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 // CORS Configuration
 app.use(
   cors({
-    origin: env.CLIENT_URL || 'http://localhost:5173',
+    origin: env.CLIENT_URL,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+    methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS']
   })
 );
 
@@ -37,14 +38,27 @@ app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/status', statusRoutes);
 app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/workspaces', workspacesRoutes);
+app.get('/health', (_, response) => {
+  sendSuccessResponse({
+    response,
+    message: 'API is running',
+    data: {
+      status: 'ok',
+      timestamp: new Date().toISOString()
+    }
+  });
+});
 
 async function schedulerLoop() {
   setInterval(async () => {
-    const monitors = await getDueMonitors();
-    if (monitors.length > 0) {
-      await sendToQueue(monitors);
+    try {
+      const monitors = await fetchAndLockDueMonitors();
+
+      if (monitors.length > 0) await sendToQueue(monitors);
+    } catch (err) {
+      console.error('Scheduler error', err);
     }
-  }, 5000); // run every 5 seconds
+  }, 5000);
 }
 
 // (async () => {

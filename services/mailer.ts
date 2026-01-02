@@ -71,3 +71,32 @@ export const sendRecoveryAlertOnEmail = async (
     throw new Error('Failed to send recovery email');
   }
 };
+
+export const sendEmailForVerification = async (to: string, token: string) => {
+  const verificationUrl = `${env.CLIENT_URL}/verify-email?token=${token}`;
+  logger.info(`Sending email verification to ${to} with ${verificationUrl}`);
+
+  try {
+    const mailOptions = {
+      from: `"Uptime Alert" <${process.env.GMAIL_USER}>`,
+      to,
+      subject: 'Verify your email address',
+      text: `
+        Email Verification
+
+        Please verify your email address by clicking the link below:
+
+        ${verificationUrl}
+
+        If you did not create an account, you can safely ignore this email.
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logger.info('Verification email sent successfully');
+    return info;
+  } catch (error) {
+    logger.info('Failed to send verification email');
+    throw new Error('Failed to send verification email');
+  }
+};

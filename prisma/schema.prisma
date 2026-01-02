@@ -26,6 +26,8 @@ model User {
   workspaces       workspaces[]
   workspaceMembers workspace_members[]
   userMetadata     user_metadata?
+  incidentComments incident_comments[]
+  activityLogs     activity_logs[]
 
   @@map("users")
 }
@@ -97,6 +99,7 @@ model workspaces {
   owner_id       String
   name           String
   created_at     DateTime            @default(now())
+  updated_at     DateTime            @updatedAt
   owner          User                @relation(fields: [owner_id], references: [id])
   members        workspace_members[]
   monitors       monitors[]
@@ -104,6 +107,10 @@ model workspaces {
   statusPages    status_pages[]
   alertRules     alert_rules[]
   incidents      incidents[]
+
+  tags             tags[]
+  incidentComments incident_comments[]
+  activityLogs     activity_logs[]
 }
 
 // ----------------------------
@@ -115,6 +122,7 @@ model workspace_members {
   user_id      String
   role         String
   created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
   workspace    workspaces @relation(fields: [workspace_id], references: [id])
   user         User       @relation(fields: [user_id], references: [id])
 }
@@ -123,35 +131,63 @@ model workspace_members {
 // MONITORS
 // ----------------------------
 model monitors {
-  id                    String    @id @default(uuid())
-  workspace_id          String
-  name                  String
-  url                   String
-  type                  String
-  interval_seconds      Int       @default(60)
-  timeout_ms            Int       @default(5000)
-  expected_status       Int
-  check_regions         String
-  status                String    @default("healthy")
-  last_response_time_ms Int?
-  tags                  String[]
-  last_checked_at       DateTime?
-  next_run_at           DateTime
-  consecutive_failures  Int       @default(0)
-  max_retries           Int       @default(0)
-  created_at            DateTime  @default(now())
-  updated_at            DateTime  @updatedAt
-  is_active             Boolean   @default(true)
+  id                      String    @id @default(uuid())
+  workspace_id            String
+  name                    String
+  url                     String?
+  type                    String
+  interval_seconds        Int       @default(60)
+  timeout_ms              Int       @default(5000)
+  expected_status         Int[]
+  check_regions           String
+  status                  String    @default("healthy")
+  last_response_time_ms   Int?
+  last_checked_at         DateTime?
+  grace_period            Int?
+  next_run_at             DateTime
+  consecutive_failures    Int       @default(0)
+  records                 Json?
+  max_retries             Int       @default(0)
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
+  is_active               Boolean   @default(true)
+  keyword                 String?
+  keyword_match_type      String?
+  port                    Int?
+  check_ssl_errors        Boolean   @default(false)
+  ssl_expiry_reminders    Boolean   @default(false)
+  domain_expiry_reminders Boolean   @default(false)
 
   workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
   checks       monitor_checks[]
   incidents    incidents[]
-  alert_rules  alert_rules[]
   alerts_sent  alerts_sent[]
   status_pages status_pages[]   @relation("StatusPageMonitors")
+  tags         monitor_tags[]
 
   @@index([workspace_id])
+}
+
+model monitor_tags {
+  monitor_id String
+  tag_id     String
+
+  monitor monitors @relation(fields: [monitor_id], references: [id], onDelete: Cascade)
+  tag     tags     @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([monitor_id, tag_id])
+}
+
+model tags {
+  id           String @id @default(uuid())
+  name         String
+  workspace_id String
+
+  workspace workspaces     @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  monitors  monitor_tags[]
+
+  @@unique([workspace_id, name])
 }
 
 // ----------------------------
@@ -174,6 +210,8 @@ model monitor_checks {
   response_headers        Json?
   request_headers         Json?
   response_body           String?
+  created_at              DateTime    @default(now())
+  updated_at              DateTime    @updatedAt
   monitor                 monitors    @relation(fields: [monitor_id], references: [id])
   incident_check          incidents[] @relation("IncidentCheck")
   incident_resolved_check incidents[] @relation("IncidentResolvedCheck")
@@ -185,7 +223,7 @@ model monitor_checks {
 // INCIDENTS
 // ----------------------------
 model incidents {
-  id                String          @id @default(uuid())
+  id                String              @id @default(uuid())
   monitor_id        String
   check_id          String?
   workspace_id      String
@@ -194,12 +232,14 @@ model incidents {
   resolved_at       DateTime?
   duration_seconds  Int?
   reason            String?
-  created_at        DateTime        @default(now())
-  monitor           monitors        @relation(fields: [monitor_id], references: [id])
-  check             monitor_checks? @relation("IncidentCheck", fields: [check_id], references: [id])
-  workspace         workspaces      @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  resolved_check    monitor_checks? @relation("IncidentResolvedCheck", fields: [resolved_check_id], references: [id])
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @updatedAt
+  monitor           monitors            @relation(fields: [monitor_id], references: [id])
+  check             monitor_checks?     @relation("IncidentCheck", fields: [check_id], references: [id])
+  workspace         workspaces          @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  resolved_check    monitor_checks?     @relation("IncidentResolvedCheck", fields: [resolved_check_id], references: [id])
   alerts            alerts_sent[]
+  incidentComments  incident_comments[]
 }
 
 // ----------------------------
@@ -207,16 +247,15 @@ model incidents {
 // ----------------------------
 model alert_rules {
   id           String     @id @default(uuid())
-  monitor_id   String
   workspace_id String
   alert_type   String
   workspace    workspaces @relation(fields: [workspace_id], references: [id])
   enabled      Boolean
   events       String[]
   created_at   DateTime   @default(now())
-  monitor      monitors   @relation(fields: [monitor_id], references: [id])
+  updated_at   DateTime   @updatedAt
 
-  @@unique([monitor_id, alert_type])
+  @@unique([workspace_id, alert_type])
 }
 
 // ----------------------------
@@ -228,6 +267,7 @@ model alert_channels {
   type         String
   destination  String
   created_at   DateTime      @default(now())
+  updated_at   DateTime      @updatedAt
   workspace    workspaces    @relation(fields: [workspace_id], references: [id])
   alerts       alerts_sent[]
 
@@ -243,6 +283,8 @@ model alerts_sent {
   channel_id  String
   incident_id String?
   sent_at     DateTime
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
   alert_type  String
   message     String?
   monitor     monitors       @relation(fields: [monitor_id], references: [id])
@@ -260,8 +302,48 @@ model status_pages {
   custom_domain String?    @unique
   access_level  String
   status        String
+  configs       Json?
   updated_at    DateTime   @updatedAt
   created_at    DateTime   @default(now())
   workspace     workspaces @relation(fields: [workspace_id], references: [id])
   monitors      monitors[] @relation("StatusPageMonitors")
+}
+
+model incident_comments {
+  id                     String   @id @default(uuid())
+  incident_id            String
+  user_id                String
+  workspace_id           String
+  content                String
+  publish_on_status_page Boolean
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  incident  incidents  @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@index([incident_id])
+  @@index([workspace_id])
+  @@map("incident_comments")
+}
+
+model activity_logs {
+  id            String   @id @default(uuid())
+  workspace_id  String
+  actor_user_id String?
+  entity_type   String
+  entity_id     String?
+  action        String
+  message       String?
+  metadata      Json?
+  created_at    DateTime @default(now())
+
+  workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  actor     User?      @relation(fields: [actor_user_id], references: [id], onDelete: SetNull)
+
+  @@index([workspace_id])
+  @@index([entity_type, entity_id])
+  @@index([action])
+  @@map("activity_logs")
 }

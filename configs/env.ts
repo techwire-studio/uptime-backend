@@ -40,7 +40,12 @@ export const envSchema = z.object({
   ),
 
   // Better Auth
-  BETTER_AUTH_SECRET: zRequiredString('  BETTER_AUTH_SECRET is required')
+  BETTER_AUTH_SECRET: zRequiredString('  BETTER_AUTH_SECRET is required'),
+
+  // AWS
+  AWS_ACCESS_KEY_ID: zRequiredString('AWS_ACCESS_KEY_ID is required'),
+  AWS_SECRET_ACCESS_KEY: zRequiredString('AWS_SECRET_ACCESS_KEY is required'),
+  AWS_REGION: zRequiredString('AWS_REGION is required')
 });
 
 const createEnv = () => {

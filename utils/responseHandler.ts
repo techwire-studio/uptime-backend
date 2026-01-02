@@ -1,4 +1,3 @@
-import { STATUS_CODES } from '@/constants';
 import type {
   ApiSuccessResponse,
   ApiErrorResponse,
@@ -10,7 +9,7 @@ export const sendSuccessResponse = <T>({
   response,
   message,
   data,
-  statusCode = STATUS_CODES.OK
+  statusCode = 200
 }: SendSuccessResponse<T>): void => {
   const successResponse: ApiSuccessResponse<T> = {
     success: true,
@@ -23,7 +22,7 @@ export const sendSuccessResponse = <T>({
 export const sendErrorResponse = ({
   response,
   message,
-  statusCode = STATUS_CODES.INTERNAL_SERVER_ERROR,
+  statusCode = 500,
   errors,
   stack
 }: SendErrorResponse): void => {

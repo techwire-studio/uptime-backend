@@ -2,12 +2,26 @@ import { catchAsync } from '@/middlewares/error';
 import prisma from '@/prisma';
 import { UpdateUserMetadataType } from '@/types/user';
 import { toPrismaUpdateInput } from '@/utils/common';
-import { sendSuccessResponse } from '@/utils/responseHandler';
+import {
+  sendSuccessResponse,
+  sendErrorResponse
+} from '@/utils/responseHandler';
 import { RequestHandler } from 'express';
 
+/**
+ * @route PATCH /user/:id/metadata
+ * @description Update or create metadata for a user
+ */
 export const updateUserMetadata: RequestHandler = catchAsync(
   async (request, response) => {
-    const userId = request.params.id as string;
+    const userId = request.params.id;
+
+    if (!userId) {
+      return sendErrorResponse({
+        response,
+        message: 'User Id is required'
+      });
+    }
 
     const payload = request.body;
 
@@ -17,7 +31,7 @@ export const updateUserMetadata: RequestHandler = catchAsync(
       where: { user_id: userId },
       create: {
         user_id: userId,
-        timezone: payload.timezone ?? 'GMT',
+        timezone: payload.timezone ?? 'Etc/UTC',
         locale: payload.locale ?? 'en-US',
         sms_country_code: payload.sms_country_code,
         sms_phone_number: payload.sms_phone_number,
@@ -32,31 +46,36 @@ export const updateUserMetadata: RequestHandler = catchAsync(
 
     sendSuccessResponse({
       response,
-      message: 'User metadata updated',
+      message: 'User metadata updated successfully',
       data: metadata
     });
   }
 );
 
+/**
+ * @route GET /user/:id/metadata
+ * @description Fetch metadata for a user
+ */
 export const getUserMetadata: RequestHandler = catchAsync(
   async (request, response) => {
-    const userId = request.params.id as string;
+    const userId = request.params.id;
+
+    if (!userId) {
+      return sendErrorResponse({
+        response,
+        message: 'User Id is required'
+      });
+    }
 
     const metadata = await prisma.user_metadata.findUnique({
       where: { user_id: userId }
     });
 
-    if (!metadata) {
-      return sendSuccessResponse({
-        response,
-        message: 'User metadata not found',
-        data: null
-      });
-    }
-
     sendSuccessResponse({
       response,
-      message: 'Fetched user metadata',
+      message: metadata
+        ? 'Fetched user metadata successfully'
+        : 'User metadata not found',
       data: metadata
     });
   }

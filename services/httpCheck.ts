@@ -4,66 +4,48 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 import { URL } from 'node:url';
-import { HttpMonitorCheckResult, MonitorCheckStatus } from '@/types/monitor';
+import {
+  BaseMonitorCheckResult,
+  KeywordConditionEnum,
+  MonitorCheckStatus
+} from '@/types/monitor';
 
-/**
- * Executes an HTTP monitoring check for a given monitor configuration.
- *
- * This function performs:
- *   1. DNS lookup timing
- *   2. HTTP fetch request with timeout support
- *   3. Response body download timing
- *
- * The result is formatted to match the `monitor_checks` Prisma model.
- *
- * @param monitor - A monitor object containing URL and timeout configuration.
- * @returns A structured monitor check result.
- */
 export const runHttpMonitor = async (monitor: {
   url: string;
   timeout_ms?: number;
-  expected_status?: number;
-}): Promise<HttpMonitorCheckResult> => {
+  keyword?: string;
+  keyword_match_type?: KeywordConditionEnum;
+  method?: 'GET' | 'POST';
+  body?: Record<string, string>;
+  expected_status?: number | number[];
+  headers?: Record<string, string>;
+}): Promise<BaseMonitorCheckResult> => {
   const monitorUrl = new URL(monitor.url);
   const timeoutMilliseconds = monitor.timeout_ms ?? 5000;
 
-  let dns_lookup_ms: number | null = null,
-    connect_ms: number | null = null,
-    download_ms: number | null = null;
+  let dns_lookup_ms: number | null = null;
+  let connect_ms: number | null = null;
+  let download_ms: number | null = null;
 
   const totalStartTime = performance.now();
 
   const requestHeaders = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-    'Host': monitorUrl.host,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Accept-Language': 'en-US,en;q=0.8',
-    'Cache-Control': 'no-cache',
-    'Connection': 'close'
+    'Accept': '*/*',
+    'Connection': 'close',
+    ...(monitor.headers ?? {})
   };
 
   try {
-    // -------------------------------------------------------------
-    // 1. DNS Lookup Timing
-    // -------------------------------------------------------------
-    const dnsStartTime = performance.now();
+    const dnsStart = performance.now();
     await new Promise<void>((resolve, reject) => {
-      dns.lookup(monitorUrl.hostname, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
+      dns.lookup(monitorUrl.hostname, (err) => (err ? reject(err) : resolve()));
     });
+    dns_lookup_ms = Math.round(performance.now() - dnsStart);
 
-    dns_lookup_ms = Math.round(performance.now() - dnsStartTime);
-
-    // -------------------------------------------------------------
-    // 2. CONNECT TIME (TCP handshake)
-    // -------------------------------------------------------------
     connect_ms = await new Promise<number>((resolve, reject) => {
       const isHttps = monitorUrl.protocol === 'https:';
-
       const mod = isHttps ? https : http;
 
       const req = mod.get(
@@ -84,43 +66,71 @@ export const runHttpMonitor = async (monitor: {
         });
       });
 
-      req.on('error', (err) => reject(err));
+      req.on('error', reject);
     });
 
-    // -------------------------------------------------------------
-    // 3. HTTP Request Using Fetch with Timeout
-    // -------------------------------------------------------------
-    const abortController = new AbortController();
-    const timeoutHandle = setTimeout(() => {
-      abortController.abort();
-    }, timeoutMilliseconds);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMilliseconds);
 
     const response = await fetch(monitorUrl, {
-      signal: abortController.signal,
-      headers: requestHeaders
+      method: monitor.method ?? 'GET',
+      headers: requestHeaders,
+      body:
+        monitor.method === 'POST' && monitor.body != null
+          ? JSON.stringify(monitor.body)
+          : null,
+      signal: controller.signal
     });
 
-    clearTimeout(timeoutHandle);
+    clearTimeout(timer);
 
-    // -------------------------------------------------------------
-    // 4. Body Download Timing
-    // -------------------------------------------------------------
-    const downloadStartTime = performance.now();
+    const downloadStart = performance.now();
     const responseText = await response.text();
-    download_ms = Math.round(performance.now() - downloadStartTime);
+    download_ms = Math.round(performance.now() - downloadStart);
 
     const totalTime = Math.round(performance.now() - totalStartTime);
 
+    let failed = false;
+    let error_message: string | null = null;
+
+    if (monitor.expected_status != null) {
+      const expected = Array.isArray(monitor.expected_status)
+        ? monitor.expected_status
+        : [monitor.expected_status];
+
+      if (!expected.includes(response.status)) {
+        failed = true;
+        error_message = `Unexpected status ${response.status}`;
+      }
+    }
+
+    if (monitor.keyword && monitor.keyword_match_type) {
+      const exists = responseText.includes(monitor.keyword);
+
+      if (
+        (monitor.keyword_match_type === KeywordConditionEnum.EXISTS &&
+          !exists) ||
+        (monitor.keyword_match_type === KeywordConditionEnum.NOT_EXISTS &&
+          exists)
+      ) {
+        failed = true;
+        error_message =
+          monitor.keyword_match_type === KeywordConditionEnum.EXISTS
+            ? `Keyword "${monitor.keyword}" not found`
+            : `Keyword "${monitor.keyword}" should not exist`;
+      }
+    }
+
     return {
-      status: MonitorCheckStatus.UP,
-      success: true,
+      status: failed ? MonitorCheckStatus.DOWN : MonitorCheckStatus.UP,
+      success: !failed,
       http_status: response.status,
       response_time_ms: totalTime,
       request_headers: requestHeaders,
-      response_body: responseText.slice(0, 5000), // Prevent oversized entries
+      response_body: responseText.slice(0, 5000),
       response_headers: Object.fromEntries(response.headers.entries()),
       response_size_bytes: Buffer.byteLength(responseText),
-      error_message: null,
+      error_message,
       connect_ms,
       dns_lookup_ms,
       download_ms
@@ -138,41 +148,9 @@ export const runHttpMonitor = async (monitor: {
       response_body: null,
       response_headers: null,
       response_size_bytes: null,
-      error_message: error?.message ?? 'Unknown error occurred',
+      error_message: error?.message ?? 'Unknown error',
       dns_lookup_ms,
       download_ms
     };
   }
 };
-
-export async function sendHttp({
-  url,
-  payload,
-  headers
-}: {
-  url: string;
-  payload: unknown;
-  headers?: Record<string, string>;
-}): Promise<void> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      },
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Request failed: ${response.status} ${text}`);
-    }
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}

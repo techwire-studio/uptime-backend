@@ -5,10 +5,17 @@ import {
 import { z } from 'zod';
 
 export const createStatusPageSchema = z.object({
-  workspace_id: z.string().uuid().or(z.string()),
-  name: z.string().min(1, 'Name is required'),
-  custom_domain: z.string().url().nullable(),
-  monitor_ids: z.array(z.string().uuid())
+  name: z.string().min(1),
+  workspace_id: z.string(),
+  custom_domain: z.string().nullable(),
+  monitor_ids: z.union([
+    z.array(z.string()),
+    z.string().transform((v) => JSON.parse(v))
+  ]),
+  configs: z.union([
+    z.object({}).passthrough(),
+    z.string().transform((v) => JSON.parse(v))
+  ])
 });
 
 export const updateStatusPageSchema = createStatusPageSchema.partial().extend({

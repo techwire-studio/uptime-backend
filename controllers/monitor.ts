@@ -13,97 +13,156 @@ import {
   UpdateMonitorSchemaType
 } from '@/types/monitor';
 import { AlertServicesEnum } from '@/types/alert';
-import { getWorkspaceByUserId } from './workspace';
+import { getWorkspaceByUserId } from '@/controllers/workspace';
+import {
+  getDomainExpiryDate,
+  getSSLCertificateExpiry
+} from '@/services/domainSSLMonitor';
 
 /**
  * @route POST /monitors
- * @description Create a new monitor
- * @returns {object} Created monitor
+ * @description Create a new HTTP monitor
  */
 export const createNewMonitor: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
-    const payload = request.body as CreateMonitorSchemaType;
+    const payloads = request.body as CreateMonitorSchemaType;
 
-    const workspaceId = await getWorkspaceByUserId(request.userId);
-    const wsId = workspaceId[0]?.id as string;
+    const workspace = await getWorkspaceByUserId(request.userId);
+    const wsId = workspace[0]?.id;
 
-    const monitor = await prisma.monitors.create({
-      data: {
-        workspace_id: wsId,
-        name: payload.name || payload.url,
-        url: payload.url,
-        tags: payload.tags,
-        type: MonitorTypeEnum.HTTP,
-        interval_seconds: payload.interval_seconds || 60,
-        timeout_ms: payload.timeout_ms || 5000,
-        expected_status: payload.expected_status || 200,
-        check_regions: 'us-east-1,eu-west-1',
-        status: MonitorOverallStatus.PREPARING,
-        next_run_at: new Date(
-          Date.now() + (payload.interval_seconds || 60) * 1000
-        ),
-        is_active: true,
-        consecutive_failures: 0,
-        max_retries: 0
-      }
-    });
-
-    if (payload.alert_channels?.email) {
-      await prisma.alert_rules.upsert({
-        where: {
-          monitor_id_alert_type: {
-            monitor_id: monitor.id,
-            alert_type: AlertServicesEnum.EMAIL
-          }
-        },
-        update: {
-          enabled: true,
-          events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
-        },
-        create: {
-          workspace_id: wsId,
-          alert_type: AlertServicesEnum.EMAIL,
-          enabled: true,
-          events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN],
-          monitor_id: monitor.id
-        }
-      });
-
-      await prisma.alert_channels.upsert({
-        where: {
-          workspace_id_type_destination: {
-            workspace_id: wsId,
-            type: AlertServicesEnum.EMAIL,
-            destination: request.email
-          }
-        },
-        update: {
-          type: AlertServicesEnum.EMAIL,
-          destination: request.email
-        },
-        create: {
-          workspace_id: wsId,
-          destination: request.email,
-          type: AlertServicesEnum.EMAIL
-        }
+    if (!wsId) {
+      return sendErrorResponse({
+        response,
+        message: 'User does not belong to any workspace'
       });
     }
 
-    sendSuccessResponse({
-      response,
-      data: monitor,
-      message: 'New monitor created successfully'
-    });
+    try {
+      const createdMonitorId = await prisma.$transaction(async (tx) => {
+        const monitors = await Promise.all(
+          payloads.map(async (payload) => {
+            const monitor = await tx.monitors.create({
+              data: {
+                workspace_id: wsId,
+                name: payload.name || payload.url!,
+                url: payload.url,
+                type: payload.type,
+                interval_seconds: payload.interval_seconds || 60,
+                timeout_ms: 5000,
+                records: payload?.records ?? [],
+                port: payload?.port || null,
+                check_ssl_errors: payload.check_ssl_errors || false,
+                domain_expiry_reminders:
+                  payload.domain_expiry_reminders || false,
+                ssl_expiry_reminders: payload.ssl_expiry_reminders || false,
+                grace_period: payload?.grace_period || 300,
+                keyword_match_type: payload?.keyword_match_type || null,
+                keyword: payload?.keyword || null,
+                expected_status: [200],
+                check_regions: 'us-east-1',
+                status: MonitorOverallStatus.PREPARING,
+                next_run_at: new Date(
+                  Date.now() + (payload.interval_seconds || 60) * 1000
+                ),
+                is_active: true,
+                consecutive_failures: 0,
+                max_retries: 0,
+                ...(payload.tags?.length
+                  ? {
+                      tags: {
+                        create: payload.tags.map((tagName) => ({
+                          tag: {
+                            connectOrCreate: {
+                              where: {
+                                workspace_id_name: {
+                                  workspace_id: wsId,
+                                  name: tagName
+                                }
+                              },
+                              create: {
+                                workspace_id: wsId,
+                                name: tagName
+                              }
+                            }
+                          }
+                        }))
+                      }
+                    }
+                  : {})
+              },
+              select: { id: true }
+            });
+
+            return monitor;
+          })
+        );
+
+        const shouldSetupEmailAlert = payloads.some(
+          (payload) => payload?.alert_channels?.email
+        );
+
+        if (shouldSetupEmailAlert) {
+          await tx.alert_rules.upsert({
+            where: {
+              workspace_id_alert_type: {
+                workspace_id: wsId,
+                alert_type: AlertServicesEnum.EMAIL
+              }
+            },
+            update: {
+              enabled: true,
+              events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+            },
+            create: {
+              workspace_id: wsId,
+              alert_type: AlertServicesEnum.EMAIL,
+              enabled: true,
+              events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+            }
+          });
+
+          await tx.alert_channels.upsert({
+            where: {
+              workspace_id_type_destination: {
+                workspace_id: wsId,
+                type: AlertServicesEnum.EMAIL,
+                destination: JSON.stringify({ email: request.email })
+              }
+            },
+            update: {
+              destination: JSON.stringify({ email: request.email })
+            },
+            create: {
+              workspace_id: wsId,
+              type: AlertServicesEnum.EMAIL,
+              destination: JSON.stringify({ email: request.email })
+            }
+          });
+        }
+
+        return payloads.length === 1 ? monitors[0]?.id : null;
+      });
+
+      sendSuccessResponse({
+        response,
+        data: { id: createdMonitorId },
+        message: 'Monitors created successfully'
+      });
+    } catch {
+      return sendErrorResponse({
+        response,
+        message: 'Failed to create monitors'
+      });
+    }
   }
 );
 
 /**
- * @route GET workspaces/:workspaceId/monitors
- * @description Get paginated list of workspace monitors
- * @queryParam {number} [page=1] - Page number
- * @queryParam {number} [limit=10] - Number of items per page
- * @queryParam {string} [select] - Comma-separated fields to select
- * @returns {Array} List of monitors
+ * @route GET /workspaces/:workspaceId/monitors
+ * @description Fetch paginated list of monitors in a workspace
+ * @queryParam {number} [page=1]
+ * @queryParam {number} [limit=10]
+ * @queryParam {string} [type] - Monitor type filter
  */
 export const getWorkspaceMonitors: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
@@ -111,32 +170,45 @@ export const getWorkspaceMonitors: RequestHandler = catchAsync(
     const limit = parseInt(request.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
-    const { workspaceId } = request.params as { workspaceId: string };
+    const { workspaceId } = request.params;
 
-    const monitors = await prisma.monitors.findMany({
+    if (!workspaceId) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace ID is required'
+      });
+    }
+
+    const data = await prisma.monitors.findMany({
       where: {
         workspace_id: workspaceId
       },
       skip,
       take: limit,
       include: {
+        tags: {
+          select: {
+            tag: {
+              select: { id: true, name: true }
+            }
+          }
+        },
         checks: {
           take: 20,
           orderBy: { checked_at: 'desc' },
           where: {
-            checked_at: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
-            }
+            checked_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
           },
-          select: {
-            id: true,
-            checked_at: true,
-            success: true
-          }
+          select: { id: true, checked_at: true, success: true }
         }
       },
       orderBy: { created_at: 'desc' }
     });
+
+    const monitors = data.map((monitor) => ({
+      ...monitor,
+      tags: monitor.tags.map((tag) => tag.tag)
+    }));
 
     sendSuccessResponse({
       response,
@@ -148,35 +220,52 @@ export const getWorkspaceMonitors: RequestHandler = catchAsync(
 
 /**
  * @route GET /monitors/:id
- * @description Get monitor details by ID
- * @returns {object} Monitor details with checks and incidents
+ * @description Fetch monitor details by ID including recent checks
  */
 export const getMonitorById: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
-    const { id } = request.params as { id: string };
+    const { id } = request.params;
 
-    const monitor = await prisma.monitors.findUnique({
+    if (!id) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor ID is required'
+      });
+    }
+
+    const data = await prisma.monitors.findUnique({
       where: { id },
       include: {
+        status_pages: { select: { name: true, id: true } },
+        tags: {
+          select: {
+            tag: {
+              select: { id: true, name: true }
+            }
+          }
+        },
         checks: {
-          // where: {
-          //   checked_at: {
-          //     gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
-          //   }
-          // },
+          where: {
+            checked_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+          },
           take: 25,
           orderBy: { checked_at: 'desc' }
         }
       }
     });
 
-    if (!monitor) {
+    if (!data) {
       return sendErrorResponse({
         response,
         statusCode: 404,
         message: 'Monitor not found'
       });
     }
+
+    const monitor = {
+      ...data,
+      tags: data.tags.map((tag) => tag.tag)
+    };
 
     sendSuccessResponse({
       response,
@@ -187,54 +276,79 @@ export const getMonitorById: RequestHandler = catchAsync(
 );
 
 /**
- * @description Get monitors that are due to be checked (next_run_at <= now)
- * @returns {Array} List of due monitors
+ * @description Fetch monitors due for checking (next_run_at <= now)
  */
-export const getDueMonitors = async () => {
-  const monitors = await prisma.monitors.findMany({
+export const fetchAndLockDueMonitors = async () => {
+  const now = new Date();
+
+  const dueMonitors = await prisma.monitors.findMany({
     where: {
-      next_run_at: { lte: new Date() },
+      next_run_at: { lte: now },
       is_active: true,
-      status: {
-        not: MonitorOverallStatus.PAUSED
-      }
-    }
+      status: { not: MonitorOverallStatus.PAUSED }
+    },
+    take: 50
   });
 
-  return monitors;
+  const locked: typeof dueMonitors = [];
+
+  for (const monitor of dueMonitors) {
+    const updated = await prisma.monitors.updateMany({
+      where: {
+        id: monitor.id,
+        next_run_at: { lte: now }
+      },
+      data: {
+        next_run_at: new Date(Date.now() + monitor.interval_seconds * 1000)
+      }
+    });
+
+    if (updated.count === 1) {
+      locked.push(monitor);
+    }
+  }
+
+  return locked;
 };
 
 /**
  * @route PATCH /monitors/:id
- * @description Update an existing monitor by id
- * @returns {object} Updated monitor
+ * @description Update monitor by ID
  */
 export const updateMonitorById: RequestHandler = catchAsync(
-  async (request: Request, response: Response) => {
-    const { id } = request.params as { id: string };
+  async (request, response) => {
+    const { id } = request.params;
     const payload = request.body as Partial<UpdateMonitorSchemaType>;
 
-    const updateData: Partial<UpdateMonitorSchemaType> = {};
+    if (!id) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor ID is required'
+      });
+    }
 
     const allowedFields: (keyof UpdateMonitorSchemaType)[] = [
-      'name',
       'url',
-      'type',
       'interval_seconds',
       'timeout_ms',
       'expected_status',
-      'tags',
+      'grace_period',
+      'records',
+      'keyword',
+      'keyword_match_type',
+      'port',
       'check_regions',
+      'ssl_expiry_reminders',
+      'domain_expiry_reminders',
+      'check_ssl_errors',
       'status',
-      'consecutive_failures',
-      'max_retries',
       'is_active'
     ];
 
+    const updateData: Record<string, any> = {};
+
     for (const field of allowedFields) {
-      if (payload[field] !== undefined) {
-        updateData[field] = payload[field];
-      }
+      if (payload[field] !== undefined) updateData[field] = payload[field];
     }
 
     if (payload.interval_seconds) {
@@ -243,49 +357,82 @@ export const updateMonitorById: RequestHandler = catchAsync(
       );
     }
 
-    const updatedMonitor = await prisma.monitors.update({
-      where: { id },
-      data: updateData
+    await prisma.$transaction(async (tx) => {
+      if (payload.tags !== undefined) {
+        await tx.monitor_tags.deleteMany({
+          where: { monitor_id: id }
+        });
+
+        if (payload.tags.length > 0) {
+          const monitor = await tx.monitors.findUnique({
+            where: { id },
+            select: { workspace_id: true }
+          });
+
+          const existingTags = await tx.tags.findMany({
+            where: {
+              workspace_id: monitor!.workspace_id,
+              name: { in: payload.tags }
+            }
+          });
+
+          const tagMap = new Map(existingTags.map((t) => [t.name, t.id]));
+          const missing = payload.tags.filter((t) => !tagMap.has(t));
+
+          if (missing.length) {
+            await tx.tags.createMany({
+              data: missing.map((name) => ({
+                name,
+                workspace_id: monitor!.workspace_id
+              }))
+            });
+
+            const created = await tx.tags.findMany({
+              where: {
+                workspace_id: monitor!.workspace_id,
+                name: { in: missing }
+              }
+            });
+
+            created.forEach((t) => tagMap.set(t.name, t.id));
+          }
+
+          await tx.monitor_tags.createMany({
+            data: payload.tags.map((tag) => ({
+              monitor_id: id,
+              tag_id: tagMap.get(tag)!
+            }))
+          });
+        }
+      }
+
+      await tx.monitors.update({
+        where: { id },
+        data: updateData
+      });
     });
 
     sendSuccessResponse({
       response,
-      data: updatedMonitor,
+      data: null,
       message: 'Monitor updated successfully'
     });
   }
 );
 
 /**
- * Delete multiple monitors by IDs.
- *
  * @route DELETE /monitors
- * @body { ids: string[] } - Array of monitor IDs to delete
+ * @description Delete multiple monitors by IDs along with their related alerts, checks, and incidents
  */
 export const deleteMonitors: RequestHandler = catchAsync(
-  async (request, response) => {
+  async (request: Request, response: Response) => {
     const { ids } = request.body as { ids: string[] };
 
     await prisma.$transaction([
-      prisma.alerts_sent.deleteMany({
-        where: { monitor_id: { in: ids } }
-      }),
-
-      prisma.incidents.deleteMany({
-        where: { monitor_id: { in: ids } }
-      }),
-
-      prisma.monitor_checks.deleteMany({
-        where: { monitor_id: { in: ids } }
-      }),
-
-      prisma.alert_rules.deleteMany({
-        where: { monitor_id: { in: ids } }
-      }),
-
-      prisma.monitors.deleteMany({
-        where: { id: { in: ids } }
-      })
+      prisma.alerts_sent.deleteMany({ where: { monitor_id: { in: ids } } }),
+      prisma.incidents.deleteMany({ where: { monitor_id: { in: ids } } }),
+      prisma.monitor_checks.deleteMany({ where: { monitor_id: { in: ids } } }),
+      prisma.monitors.deleteMany({ where: { id: { in: ids } } })
     ]);
 
     sendSuccessResponse({
@@ -297,18 +444,15 @@ export const deleteMonitors: RequestHandler = catchAsync(
 );
 
 /**
- * Bulk reset monitors to initial state and delete all stats.
- *
  * @route POST /monitors/reset-stats
- * @body { ids: string[] } - Array of monitor IDs to reset
+ * @description Bulk reset monitors to initial state and delete all stats
  */
 export const resetMonitorStats: RequestHandler = catchAsync(
-  async (request, response) => {
+  async (request: Request, response: Response) => {
     const { ids } = request.body as { ids: string[] };
 
     const monitors = await prisma.monitors.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, workspace_id: true, name: true, url: true }
+      where: { id: { in: ids } }
     });
 
     if (monitors.length === 0) {
@@ -319,36 +463,46 @@ export const resetMonitorStats: RequestHandler = catchAsync(
       });
     }
 
-    for (const monitor of monitors) {
-      await prisma.monitor_checks.deleteMany({
-        where: { monitor_id: monitor.id }
-      });
+    await prisma.$transaction(async (tx) => {
+      for (const monitor of monitors) {
+        await tx.monitor_checks.deleteMany({
+          where: { monitor_id: monitor.id }
+        });
 
-      await prisma.incidents.deleteMany({
-        where: { monitor_id: monitor.id }
-      });
+        await tx.incidents.deleteMany({
+          where: { monitor_id: monitor.id }
+        });
 
-      await prisma.monitors.update({
-        where: { id: monitor.id },
-        data: {
-          workspace_id: monitor.workspace_id,
-          name: monitor.name || monitor.url,
-          url: monitor.url,
-          type: 'http',
-          interval_seconds: 60,
-          timeout_ms: 5000,
-          expected_status: 200,
-          check_regions: 'us-east-1,eu-west-1',
-          status: 'healthy',
-          next_run_at: new Date(Date.now() + 60 * 1000),
-          is_active: true,
-          consecutive_failures: 0,
-          max_retries: 0,
-          last_response_time_ms: null,
-          last_checked_at: null
-        }
-      });
-    }
+        await tx.monitor_tags.deleteMany({
+          where: { monitor_id: monitor.id }
+        });
+
+        await tx.monitors.update({
+          where: { id: monitor.id },
+          data: {
+            workspace_id: monitor.workspace_id,
+            name: monitor.name || (monitor.url as string),
+            url: monitor.url,
+            type: monitor.type,
+            keyword: monitor.keyword,
+            keyword_match_type: monitor.keyword_match_type,
+            grace_period: monitor.grace_period,
+            port: monitor.port,
+            interval_seconds: monitor.interval_seconds || 60,
+            timeout_ms: monitor.timeout_ms || 5000,
+            expected_status: monitor.expected_status,
+            check_regions: monitor.check_regions,
+            status: MonitorOverallStatus.HEALTHY,
+            next_run_at: new Date(Date.now() + 60 * 1000),
+            is_active: true,
+            consecutive_failures: 0,
+            max_retries: 0,
+            last_response_time_ms: null,
+            last_checked_at: null
+          }
+        });
+      }
+    });
 
     sendSuccessResponse({
       response,
@@ -365,7 +519,7 @@ export const resetMonitorStats: RequestHandler = catchAsync(
  */
 export const getMonitorsBySelect: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
-    const selectQuery = request.query.select as string | undefined;
+    const selectQuery = request.query.select as string;
 
     const allowedFields = [
       'id',
@@ -376,20 +530,17 @@ export const getMonitorsBySelect: RequestHandler = catchAsync(
       'updated_at'
     ] as const;
 
-    let select: Record<string, true> | undefined = undefined;
+    let select: Record<string, true> | undefined;
 
     if (selectQuery) {
       const fields = selectQuery
         .split(',')
-        .map((f) => f.trim())
-        .filter((f) => allowedFields.includes(f as any));
+        .map((field) => field.trim())
+        .filter((field) => allowedFields.includes(field as any));
 
       if (fields.length > 0) {
         select = fields.reduce(
-          (acc, field) => {
-            acc[field] = true;
-            return acc;
-          },
+          (acc, field) => ({ ...acc, [field]: true }),
           {} as Record<string, true>
         );
       }
@@ -397,13 +548,205 @@ export const getMonitorsBySelect: RequestHandler = catchAsync(
 
     const monitors = await prisma.monitors.findMany({
       ...(select && { select }),
-      orderBy: { created_at: 'desc' }
+      orderBy: { created_at: 'desc' },
+      where: {
+        type: MonitorTypeEnum.HTTP
+      }
     });
 
     sendSuccessResponse({
       response,
       data: monitors,
       message: 'Monitors fetched successfully'
+    });
+  }
+);
+
+/**
+ * @route GET /monitors/checks
+ * @description Fetch checks for a monitor within a start and end date
+ * @queryParam {string} start - Start date in ISO format (required)
+ * @queryParam {string} end - End date in ISO format (required)
+ */
+export const getChecks: RequestHandler = catchAsync(
+  async (request, response) => {
+    const { start, end } = request.query;
+
+    if (!start || !end) {
+      return sendErrorResponse({
+        response,
+        message: 'Both start and end dates are required'
+      });
+    }
+
+    const startDate = new Date(start as string);
+    const endDate = new Date(end as string);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return sendErrorResponse({
+        response,
+        message:
+          'Invalid date format for start or end. Use ISO format (YYYY-MM-DDTHH:MM:SSZ)'
+      });
+    }
+
+    const checks = await prisma.monitor_checks.findMany({
+      where: {
+        monitor: {
+          type: {
+            not: MonitorTypeEnum.HEARTBEAT
+          },
+          is_active: true
+        },
+        created_at: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+
+    sendSuccessResponse({
+      response,
+      data: checks,
+      message: checks.length
+        ? `Fetched ${checks.length} check(s) successfully`
+        : 'No checks found for the given criteria'
+    });
+  }
+);
+
+/**
+ * @route POST /monitors/:monitorId/heartbeat
+ * @description Update last_checked_at for a heartbeat monitor
+ * @param {string} monitorId - Monitor ID in the URL path
+ */
+export const updateHeartbeat: RequestHandler = catchAsync(
+  async (request, response) => {
+    const monitorId = request.params?.monitorId;
+
+    if (!monitorId) {
+      return sendErrorResponse({
+        response: response,
+        message: 'Monitor Id is required'
+      });
+    }
+
+    const monitor = await prisma.monitors.findUnique({
+      where: { id: monitorId }
+    });
+
+    if (!monitor) {
+      return sendErrorResponse({
+        response: response,
+        message: 'Monitor not found'
+      });
+    }
+
+    if (!monitor.is_active) {
+      return sendErrorResponse({
+        response: response,
+        message: 'Monitor is not active'
+      });
+    }
+
+    if (monitor.type !== MonitorTypeEnum.HEARTBEAT) {
+      return sendErrorResponse({
+        response: response,
+        message: 'Monitor is not of type HEARTBEAT'
+      });
+    }
+
+    await prisma.monitors.update({
+      where: { id: monitorId },
+      data: { last_checked_at: new Date() }
+    });
+
+    sendSuccessResponse({
+      response,
+      data: null,
+      message: 'Heartbeat updated successfully'
+    });
+  }
+); /**
+ * @route GET /monitors/:id/domain-ssl
+ * @description Get domain & SSL expiry information for a monitor
+ */
+export const getDomainAndSSL: RequestHandler = catchAsync(
+  async (request, response) => {
+    const monitorId = request.params?.id;
+
+    if (!monitorId) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor Id is required'
+      });
+    }
+
+    const monitor = await prisma.monitors.findUnique({
+      where: { id: monitorId }
+    });
+
+    if (!monitor) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor not found'
+      });
+    }
+
+    if (!monitor.is_active) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor is not active'
+      });
+    }
+
+    if (!monitor.url) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor does not have a valid URL'
+      });
+    }
+
+    let hostname: string;
+
+    try {
+      const parsedUrl = new URL(
+        monitor.url.startsWith('http') ? monitor.url : `https://${monitor.url}`
+      );
+
+      hostname = parsedUrl.hostname.toLowerCase();
+    } catch {
+      return sendErrorResponse({
+        response,
+        message: 'Invalid URL format'
+      });
+    }
+
+    hostname = hostname.replace(/^www\./, '');
+
+    const isValidDomain = /^[a-z0-9-]+\.[a-z]{2,}$/i.test(hostname);
+
+    if (!isValidDomain) {
+      return sendErrorResponse({
+        response,
+        message: 'Domain must be a valid root domain (example.com)'
+      });
+    }
+
+    const [domainExpiry, sslExpiry] = await Promise.all([
+      getDomainExpiryDate(hostname),
+      getSSLCertificateExpiry(hostname)
+    ]);
+
+    sendSuccessResponse({
+      response,
+      data: {
+        domain: hostname,
+        domain_expiry_date: domainExpiry ? domainExpiry.toISOString() : null,
+        ssl_valid_until: sslExpiry ? sslExpiry.toISOString() : null
+      },
+      message: 'Domain and SSL details fetched successfully'
     });
   }
 );

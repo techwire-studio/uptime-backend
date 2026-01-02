@@ -7,18 +7,29 @@ import { catchAsync } from '@/middlewares/error';
 import type { RequestHandler } from 'express';
 
 /**
- * @route GET /monitors/:monitorId/incidents
- * @description Fetch incidents for a monitor within a start and end date, including monitor info
- * @param {string} monitorId - ID of the monitor (from route params)
+ * @route GET /monitors/:id/incidents
+ * @description Fetch incidents for a monitor within a start and end date
  * @queryParam {string} start - Start date in ISO format (required)
  * @queryParam {string} end - End date in ISO format (required)
- * @queryParam {string} [status] - Optional status filter
- * @returns {Array} List of incidents with monitor info
  */
 export const getIncidentByMonitorId: RequestHandler = catchAsync(
   async (request, response) => {
-    const { id } = request.params as { id: string };
+    const { id } = request.params;
     const { start, end } = request.query;
+
+    if (!id) {
+      return sendErrorResponse({
+        response,
+        message: 'Monitor Id is required'
+      });
+    }
+
+    if (!start || !end) {
+      return sendErrorResponse({
+        response,
+        message: 'Both start and end dates are required'
+      });
+    }
 
     const startDate = new Date(start as string);
     const endDate = new Date(end as string);
@@ -26,7 +37,6 @@ export const getIncidentByMonitorId: RequestHandler = catchAsync(
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       return sendErrorResponse({
         response,
-        statusCode: 400,
         message:
           'Invalid date format for start or end. Use ISO format (YYYY-MM-DDTHH:MM:SSZ)'
       });
@@ -52,26 +62,26 @@ export const getIncidentByMonitorId: RequestHandler = catchAsync(
     });
   }
 );
+
 /**
  * @route GET /incidents/:id
  * @description Fetch a single incident by ID, including monitor, check, and resolved_check info
- * @param {string} id - ID of the incident (from route params)
- * @returns {Object} Incident with related monitor/check info
  */
 export const getIncidentById: RequestHandler = catchAsync(
   async (request, response) => {
-    const { id } = request.params as { id: string };
+    const { id } = request.params;
+
+    if (!id) {
+      return sendErrorResponse({
+        response,
+        message: 'Incident Id is required'
+      });
+    }
 
     const incident = await prisma.incidents.findUnique({
       where: { id },
       include: {
-        monitor: {
-          select: {
-            name: true,
-            type: true,
-            url: true
-          }
-        },
+        monitor: { select: { name: true, type: true, url: true } },
         check: {
           select: {
             id: true,
@@ -95,49 +105,81 @@ export const getIncidentById: RequestHandler = catchAsync(
       }
     });
 
+    if (!incident) {
+      return sendErrorResponse({
+        response,
+        statusCode: 404,
+        message: 'Incident not found'
+      });
+    }
+
     sendSuccessResponse({
       response,
       data: incident,
-      message: incident ? `Incident fetched successfully` : 'Incident not found'
+      message: 'Incident fetched successfully'
     });
   }
 );
 
 /**
- * @route GET workspaces/:workspaceId/incidents
- * @description Get paginated list of incidents including monitor + check details
+ * @route GET /workspaces/:workspaceId/incidents
+ * @description Get paginated list of incidents for a workspace including monitor info
  * @queryParam {number} [page=1] - Page number
  * @queryParam {number} [limit=10] - Number of items per page
- * @returns {Array} List of incidents with monitor name, url, checks, timestamps
  */
 export const getWorkspaceIncidents: RequestHandler = catchAsync(
   async (request, response) => {
     const page = parseInt(request.query.page as string) || 1;
     const limit = parseInt(request.query.limit as string) || 10;
     const skip = (page - 1) * limit;
-    const { workspaceId } = request.params as { workspaceId: string };
+    const { workspaceId } = request.params;
+
+    if (!workspaceId) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace Id is required'
+      });
+    }
 
     const incidents = await prisma.incidents.findMany({
-      where: {
-        workspace_id: workspaceId
-      },
+      where: { workspace_id: workspaceId },
       skip,
       take: limit,
       include: {
         monitor: {
           select: {
             name: true,
-            url: true
+            url: true,
+            tags: {
+              select: {
+                tag: {
+                  select: { id: true, name: true }
+                }
+              }
+            }
           }
         }
       },
       orderBy: { created_at: 'desc' }
     });
 
+    const normalized = incidents.map((i) => ({
+      ...i,
+      monitor: i.monitor && {
+        ...i.monitor,
+        tags: i.monitor.tags.map((t) => ({
+          id: t.tag.id,
+          name: t.tag.name
+        }))
+      }
+    }));
+
     sendSuccessResponse({
       response,
-      data: incidents,
-      message: 'Incidents fetched successfully'
+      data: normalized,
+      message: incidents.length
+        ? `Fetched ${incidents.length} incident(s) successfully`
+        : 'No incidents found for the given workspace'
     });
   }
 );

@@ -1,9 +1,13 @@
 import { env } from '@/configs/env';
-import { createWorkspaceWithMembers } from '@/controllers/workspace';
+import {
+  createWorkspaceWithMembers,
+  deleteUserAndRelatedData
+} from '@/controllers/workspace';
 import prisma from '@/prisma';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { createAuthMiddleware } from 'better-auth/api';
+import { sendEmailForVerification } from '@/services/mailer';
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -16,32 +20,34 @@ export const auth = betterAuth({
     after: createAuthMiddleware(async (ctx) => {
       if (ctx.path.startsWith('/sign-up')) {
         const session = ctx.context.newSession;
-        await createWorkspaceWithMembers({
-          name: 'Workspace 1',
-          ownerId: session?.user.id as string,
-          userIds: [session?.user.id] as string[]
-        });
+        if (session) {
+          await createWorkspaceWithMembers({
+            name: 'Workspace 1',
+            ownerId: session?.user.id as string,
+            userIds: [session?.user.id] as string[]
+          });
+        }
       }
     })
   },
-  // emailVerification: {
-  //   sendOnSignUp: true,
-  //   autoSignInAfterVerification: true,
-  //   async sendVerificationEmail({ user, url }) {
-  //     await sendEmail({
-  //       to: user.email,
-  //       subject: 'Verify your email',
-  //       text: `Click the link to verify your email: ${url}`
-  //     });
-  //   }
-  // },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
+    async sendVerificationEmail({ user, token }) {
+      await sendEmailForVerification(user.email, token);
+    }
+  },
   user: {
     deleteUser: {
-      enabled: true
+      enabled: true,
+      afterDelete: async (user) => deleteUserAndRelatedData(user.id)
     }
   },
   emailAndPassword: {
-    enabled: true
+    enabled: true,
+    requireEmailVerification: true,
+    autoSignInAfterVerification: true
   }
 });
 

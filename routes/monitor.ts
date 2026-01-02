@@ -5,7 +5,10 @@ import {
   updateMonitorById,
   deleteMonitors,
   resetMonitorStats,
-  getMonitorsBySelect
+  getMonitorsBySelect,
+  getChecks,
+  updateHeartbeat,
+  getDomainAndSSL
 } from '@/controllers/monitor';
 import { authenticationMiddleware } from '@/middlewares/auth';
 import { validateRequestPayload } from '@/middlewares/validation';
@@ -18,12 +21,17 @@ import express from 'express';
 const router = express.Router();
 
 router.get('/select', authenticationMiddleware, getMonitorsBySelect);
+router.get('/checks', getChecks);
 router.post(
-  '/new',
+  '/create',
   authenticationMiddleware,
   validateRequestPayload(createMonitorSchema),
   createNewMonitor
 );
+router.get('/:id/incidents', getIncidentByMonitorId);
+router.get('/:id/domain-ssl', getDomainAndSSL);
+router.post('/:monitorId/heartbeat', updateHeartbeat);
+router.post('/reset-stats', authenticationMiddleware, resetMonitorStats);
 router.patch(
   '/:id',
   authenticationMiddleware,
@@ -32,7 +40,5 @@ router.patch(
 );
 router.get('/:id', authenticationMiddleware, getMonitorById);
 router.delete('/', authenticationMiddleware, deleteMonitors);
-router.get('/:id/incidents', getIncidentByMonitorId);
-router.post('/reset-stats', authenticationMiddleware, resetMonitorStats);
 
 export default router;

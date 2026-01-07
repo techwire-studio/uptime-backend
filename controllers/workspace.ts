@@ -1,9 +1,12 @@
 import { catchAsync } from '@/middlewares/error';
 import prisma from '@/prisma';
+import { sendInviteEmail } from '@/services/mailer';
 import {
   CreateAlertChannelType,
+  InviteWorkspaceMemberType,
   UpdateTagsType,
-  WorkspaceMembers
+  UpdateWorkspaceMemberType,
+  WorkspaceMembersRole
 } from '@/types/workspace';
 import {
   sendSuccessResponse,
@@ -11,65 +14,73 @@ import {
 } from '@/utils/responseHandler';
 import { RequestHandler } from 'express';
 
-/**
- * Create a workspace along with its members
- */
-export const createWorkspaceWithMembers = async ({
-  name,
-  ownerId,
-  userIds
+export const createWorkspaceOrAddUser = async ({
+  email,
+  userId
 }: {
-  name: string;
-  ownerId: string;
-  userIds: string[];
+  email: string;
+  userId: string;
 }) => {
-  return prisma.workspaces.create({
-    data: {
-      name,
-      owner_id: ownerId,
-      members: {
-        createMany: {
-          data: userIds.map((userId) => ({
-            user_id: userId,
-            role:
-              userId === ownerId
-                ? WorkspaceMembers.OWNER
-                : WorkspaceMembers.MEMBER
-          }))
-        }
-      }
-    }
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user) {
+    throw new Error('User not found with this email');
+  }
+
+  const existingMember = await prisma.workspace_members.findFirst({
+    where: { metadata: { path: ['email'], equals: email } }
   });
-};
 
-/**
- * @route POST /workspaces
- * @description Create a new workspace with members
- */
-export const createWorkspace: RequestHandler = catchAsync(
-  async (request, response) => {
-    const { ownerId, userIds = [] } = request.body;
-
-    if (!ownerId) {
-      return sendErrorResponse({
-        response,
-        message: 'Owner Id is required'
-      });
-    }
-
-    const workspace = await createWorkspaceWithMembers({
-      name: 'Workspace 1',
-      ownerId,
-      userIds: Array.from(new Set([ownerId, ...userIds]))
+  if (existingMember && !existingMember.user_id) {
+    await prisma.workspace_members.update({
+      where: { id: existingMember.id },
+      data: { user_id: userId }
     });
 
-    sendSuccessResponse({
-      response,
-      message: 'Workspace created successfully',
-      data: workspace
+    const metadata = existingMember.metadata as {
+      countryCode?: string;
+      phoneNumber?: string;
+    };
+
+    await prisma.user_metadata.upsert({
+      where: { user_id: userId },
+      update: {
+        sms_country_code: metadata?.countryCode || '',
+        sms_phone_number: metadata?.phoneNumber || ''
+      },
+      create: {
+        user_id: userId,
+        sms_country_code: metadata?.countryCode || '',
+        sms_phone_number: metadata?.phoneNumber || ''
+      }
     });
   }
-);
+
+  const workspace = await prisma.workspaces.create({
+    data: {
+      name: user.name || 'My Workspace',
+      owner_id: userId,
+      current_plan_type: 'free',
+      razorpay_customer_id: null
+    }
+  });
+
+  const member = await prisma.workspace_members.create({
+    data: {
+      workspace_id: workspace.id,
+      user_id: userId,
+      role: WorkspaceMembersRole.OWNER,
+      metadata: { email },
+      is_active: true
+    }
+  });
+
+  return {
+    message: 'Workspace created and user added as owner',
+    workspace,
+    member
+  };
+};
 
 /**
  * @route POST /workspaces/:workspaceId/integrations
@@ -240,15 +251,65 @@ export const getUserWorkspaces: RequestHandler = catchAsync(
   }
 );
 
-/**
- * Utility function to fetch workspace IDs for a given user
- */
+export const getWorkspaceMembers: RequestHandler = catchAsync(
+  async (request, response) => {
+    const { workspaceId } = request.params;
+
+    if (!workspaceId) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace Id is required'
+      });
+    }
+
+    const members = await prisma.workspace_members.findMany({
+      where: { workspace_id: workspaceId },
+      select: {
+        id: true,
+        role: true,
+        is_active: true,
+        metadata: true,
+        user: {
+          select: {
+            id: true,
+            userMetadata: {
+              select: {
+                sms_country_code: true,
+                sms_phone_number: true
+              }
+            },
+            email: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    sendSuccessResponse({
+      response,
+      message: 'Fetched workspace members successfully',
+      data: members
+    });
+  }
+);
+
 export const getWorkspaceByUserId = async (userId: string) => {
   return prisma.workspaces.findMany({
     where: {
       OR: [{ owner_id: userId }, { members: { some: { user_id: userId } } }]
     },
-    select: { id: true }
+    select: {
+      id: true,
+      name: true,
+      billing_details: true,
+      subscription: {
+        where: { status: 'active' },
+        include: {
+          plan: true,
+          transactions: true
+        }
+      }
+    }
   });
 };
 
@@ -407,6 +468,291 @@ export const updateWorkspaceTags: RequestHandler = catchAsync(
       response,
       data: null,
       message: 'Tags updated successfully'
+    });
+  }
+);
+
+/**
+ * @route POST /workspaces/:workspaceId/invite
+ * @description Invite a team member or add notify-only alert recipient
+ */
+export const inviteTeamMember: RequestHandler = catchAsync(
+  async (request, response) => {
+    const { workspaceId } = request.params;
+    const payload = request.body as InviteWorkspaceMemberType;
+
+    if (!workspaceId) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace Id is required'
+      });
+    }
+
+    const workspace = await prisma.workspaces.findUnique({
+      where: { id: workspaceId },
+      select: { name: true, owner: { select: { name: true } } }
+    });
+
+    if (!workspace) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace not found'
+      });
+    }
+
+    // Check if user exists in the system
+    const user = await prisma.user.findUnique({
+      where: { email: payload.email }
+    });
+
+    // If user exists, check if they're already a workspace member
+    if (user) {
+      const existingMember = await prisma.workspace_members.findFirst({
+        where: {
+          workspace_id: workspaceId,
+          user_id: user.id
+        }
+      });
+
+      if (existingMember) {
+        return sendErrorResponse({
+          response,
+          message: 'User is already a member of this workspace'
+        });
+      }
+    }
+
+    if (payload.role === WorkspaceMembersRole.NOTIFY_ONLY) {
+      const existingChannel = await prisma.alert_channels.findFirst({
+        where: {
+          workspace_id: workspaceId,
+          type: 'email',
+          destination: JSON.stringify({ email: payload.email })
+        }
+      });
+
+      if (existingChannel) {
+        return sendErrorResponse({
+          response,
+          message: 'Notify-only email already exists in alert channel'
+        });
+      }
+
+      const channel = await prisma.alert_channels.create({
+        data: {
+          workspace_id: workspaceId,
+          type: 'email',
+          destination: JSON.stringify({ email: payload.email })
+        }
+      });
+
+      await prisma.workspace_members.create({
+        data: {
+          workspace_id: workspaceId,
+          metadata: payload,
+          user_id: user?.id || null,
+          role: payload.role,
+          is_active: true
+        }
+      });
+
+      // await sendInviteEmail(
+      //   email,
+      //   workspace.owner?.name || workspace.name,
+      //   role
+      // );
+
+      return sendSuccessResponse({
+        response,
+        message:
+          'Notify-only member added to workspace & alert channel, email sent',
+        data: channel
+      });
+    }
+
+    const member = await prisma.workspace_members.create({
+      data: {
+        workspace_id: workspaceId,
+        metadata: payload,
+        user_id: user?.id || null,
+        role: payload.role,
+        is_active: false
+      }
+    });
+
+    // await sendInviteEmail(email, workspace.owner?.name || workspace.name, role);
+
+    return sendSuccessResponse({
+      response,
+      message: 'Workspace member added and invitation email sent',
+      data: member
+    });
+  }
+);
+
+/**
+ * @route PATCH /workspaces/:workspaceId/members
+ * @description Update workspace member role and metadata
+ */
+export const updateWorkspaceMember: RequestHandler = catchAsync(
+  async (request, response) => {
+    const { workspaceId } = request.params;
+
+    const payload = request.body as UpdateWorkspaceMemberType;
+
+    const userId = request.userId;
+
+    if (!workspaceId) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace Id is required'
+      });
+    }
+
+    const requester = await prisma.workspace_members.findFirst({
+      where: {
+        workspace_id: workspaceId,
+        user_id: userId
+      }
+    });
+
+    if (!requester || requester.role !== WorkspaceMembersRole.OWNER) {
+      return sendErrorResponse({
+        response,
+        message: 'You are not allowed to update workspace members'
+      });
+    }
+
+    const members = await prisma.$queryRaw<
+      {
+        id: string;
+        metadata: any;
+        role: string;
+      }[]
+    >`
+  SELECT *
+  FROM workspace_members
+  WHERE workspace_id = ${workspaceId}
+    AND metadata->>'email' = ${payload.email}
+  LIMIT 1
+`;
+
+    if (!members || members.length === 0) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace member not found'
+      });
+    }
+
+    const member = members[0];
+
+    if (!member) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace member not found'
+      });
+    }
+
+    if (
+      payload.role === WorkspaceMembersRole.NOTIFY_ONLY &&
+      member.role !== WorkspaceMembersRole.NOTIFY_ONLY
+    ) {
+      const existingChannel = await prisma.alert_channels.findFirst({
+        where: {
+          workspace_id: workspaceId,
+          type: 'email',
+          destination: JSON.stringify({ email: payload.email })
+        }
+      });
+
+      if (!existingChannel) {
+        await prisma.alert_channels.create({
+          data: {
+            workspace_id: workspaceId,
+            type: 'email',
+            destination: JSON.stringify({ email: payload.email })
+          }
+        });
+      }
+    }
+
+    const updatedMember = await prisma.workspace_members.update({
+      where: { id: member.id },
+      data: {
+        role: payload.role ?? member.role,
+        metadata: {
+          ...(member.metadata ?? {}),
+          ...(payload.email && { email: payload.email }),
+          ...(payload.role && { role: payload.role }),
+          ...(payload.countryCode && { countryCode: payload.countryCode }),
+          ...(payload.phoneNumber && { phoneNumber: payload.phoneNumber })
+        }
+      }
+    });
+
+    sendSuccessResponse({
+      response,
+      message: 'Workspace member updated successfully',
+      data: updatedMember
+    });
+  }
+);
+
+/**
+ * @route DELETE /workspaces/:workspaceId/members/:memberId
+ * @description Delete a workspace member
+ */
+export const deleteWorkspaceMember: RequestHandler = catchAsync(
+  async (request, response) => {
+    const { workspaceId, memberId } = request.params;
+    const userId = request.userId;
+
+    if (!workspaceId || !memberId)
+      return sendErrorResponse({
+        response,
+        message: 'Workspace Id and Member Id are required'
+      });
+
+    const member = await prisma.workspace_members.findFirst({
+      where: {
+        id: memberId,
+        workspace_id: workspaceId
+      }
+    });
+
+    if (!member)
+      return sendErrorResponse({
+        response,
+        message: 'Workspace member not found'
+      });
+
+    const requester = await prisma.workspace_members.findFirst({
+      where: {
+        workspace_id: workspaceId,
+        user_id: userId
+      }
+    });
+
+    if (!requester || requester.role !== WorkspaceMembersRole.OWNER)
+      return sendErrorResponse({
+        response,
+        message: 'You are not allowed to remove members from this workspace'
+      });
+
+    if (member.user_id === userId)
+      return sendErrorResponse({
+        response,
+        message: 'You cannot remove yourself from the workspace'
+      });
+
+    await prisma.workspace_members.delete({
+      where: { id: memberId }
+    });
+
+    sendSuccessResponse({
+      response,
+      data: null,
+      message: 'Workspace member removed successfully'
     });
   }
 );

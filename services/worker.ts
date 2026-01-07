@@ -163,7 +163,7 @@ export const startWorker = async (): Promise<void> => {
                 action: 'alert.email_sent',
                 entity_type: 'alert',
                 entity_id: activeIncident.id,
-                message: `Incident alert email sent to ${channel.destination}`,
+                message: `Incident alert email sent to ${JSON.parse(channel.destination)?.email}`,
                 metadata: { monitor_id: monitor.id, channel_id: channel.id }
               });
             }
@@ -230,7 +230,7 @@ export const startWorker = async (): Promise<void> => {
               action: 'alert.recovery_email_sent',
               entity_type: 'alert',
               entity_id: activeIncident.id,
-              message: `Recovery alert email sent to ${channel.destination}`,
+              message: `Recovery alert email sent to ${JSON.parse(channel.destination)?.email}`,
               metadata: { monitor_id: monitor.id, channel_id: channel.id }
             });
           }
@@ -284,7 +284,6 @@ export const startWorker = async (): Promise<void> => {
       channel.ack(message);
       logger.info('STEP 9 DONE: Message acknowledged');
     } catch (err) {
-      console.log(err);
       logger.error('Worker error — NACKing message', { error: err });
       channel.nack(message, false, true);
     }

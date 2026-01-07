@@ -45,7 +45,14 @@ export const envSchema = z.object({
   // AWS
   AWS_ACCESS_KEY_ID: zRequiredString('AWS_ACCESS_KEY_ID is required'),
   AWS_SECRET_ACCESS_KEY: zRequiredString('AWS_SECRET_ACCESS_KEY is required'),
-  AWS_REGION: zRequiredString('AWS_REGION is required')
+  AWS_REGION: zRequiredString('AWS_REGION is required'),
+
+  // Razorpay
+  RAZORPAY_KEY_ID: zRequiredString('RAZORPAY_KEY_ID is required'),
+  RAZORPAY_KEY_SECRET: zRequiredString('RAZORPAY_KEY_SECRET is required'),
+  RAZORPAY_WEBHOOK_SECRET: zRequiredString(
+    'RAZORPAY_WEBHOOK_SECRET is required'
+  )
 });
 
 const createEnv = () => {

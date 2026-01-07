@@ -54,7 +54,7 @@ export const createStatusPage: RequestHandler = catchAsync(
     const statusPage = await prisma.status_pages.create({
       data: {
         name,
-        custom_domain,
+        custom_domain: custom_domain || null,
         workspace_id,
         configs: {
           ...parsedConfigs,

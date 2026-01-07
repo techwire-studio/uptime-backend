@@ -21,11 +21,6 @@ export const runHeartbeatMonitor = async (monitor: {
     errorMessage = 'No heartbeat received yet';
   } else {
     const timeSinceLastHeartbeat = now - monitor.last_heartbeat;
-    console.log({
-      timeSinceLastHeartbeat,
-      intervalMs,
-      gracePeriodMs
-    });
 
     if (timeSinceLastHeartbeat <= intervalMs + gracePeriodMs) {
       isHealthy = true;

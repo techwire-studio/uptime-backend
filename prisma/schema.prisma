@@ -95,22 +95,25 @@ model Verification {
 // WORKSPACES
 // ----------------------------
 model workspaces {
-  id             String              @id @default(uuid())
-  owner_id       String
-  name           String
-  created_at     DateTime            @default(now())
-  updated_at     DateTime            @updatedAt
-  owner          User                @relation(fields: [owner_id], references: [id])
-  members        workspace_members[]
-  monitors       monitors[]
-  alert_channels alert_channels[]
-  statusPages    status_pages[]
-  alertRules     alert_rules[]
-  incidents      incidents[]
-
-  tags             tags[]
-  incidentComments incident_comments[]
-  activityLogs     activity_logs[]
+  id                   String              @id @default(uuid())
+  owner_id             String
+  name                 String
+  current_plan_type    String              @default("free") // 'free', 'solo', 'team', 'enterprise'
+  razorpay_customer_id String?             @unique
+  billing_details      Json?
+  created_at           DateTime            @default(now())
+  updated_at           DateTime            @updatedAt
+  owner                User                @relation(fields: [owner_id], references: [id])
+  members              workspace_members[]
+  monitors             monitors[]
+  alert_channels       alert_channels[]
+  statusPages          status_pages[]
+  alertRules           alert_rules[]
+  incidents            incidents[]
+  subscription         subscriptions?
+  tags                 tags[]
+  incidentComments     incident_comments[]
+  activityLogs         activity_logs[]
 }
 
 // ----------------------------
@@ -119,12 +122,14 @@ model workspaces {
 model workspace_members {
   id           String     @id @default(uuid())
   workspace_id String
-  user_id      String
+  user_id      String?
   role         String
+  metadata     Json?
   created_at   DateTime   @default(now())
   updated_at   DateTime   @updatedAt
+  is_active    Boolean    @default(true)
   workspace    workspaces @relation(fields: [workspace_id], references: [id])
-  user         User       @relation(fields: [user_id], references: [id])
+  user         User?      @relation(fields: [user_id], references: [id])
 }
 
 // ----------------------------
@@ -346,4 +351,77 @@ model activity_logs {
   @@index([entity_type, entity_id])
   @@index([action])
   @@map("activity_logs")
+}
+
+// ----------------------------
+// SUBSCRIPTIONS
+// ----------------------------
+model subscription_plans {
+  id               String   @id @default(uuid())
+  razorpay_plan_id String?  @unique
+  name             String
+  plan_type        String
+  billing_cycle    String
+  amount           Decimal
+  addons           Json?
+  currency         String
+  interval_count   Int
+  features         Json
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  subscriptions subscriptions[]
+
+  @@unique([plan_type, billing_cycle])
+  @@map("subscription_plans")
+}
+
+model subscriptions {
+  id                       String                      @id @default(uuid())
+  workspace_id             String                      @unique
+  plan_id                  String
+  razorpay_subscription_id String                      @unique
+  razorpay_customer_id     String
+  status                   String
+  is_current               Boolean                     @default(true)
+  current_period_start     DateTime
+  current_period_end       DateTime
+  cancel_at_period_end     Boolean                     @default(false)
+  cancelled_at             DateTime?
+  trial_end                DateTime?
+  base_price_snapshot      Decimal
+  currency_snapshot        String                      @default("INR")
+  created_at               DateTime                    @default(now())
+  updated_at               DateTime                    @updatedAt
+  workspace                workspaces                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  plan                     subscription_plans          @relation(fields: [plan_id], references: [id])
+  transactions             subscription_transactions[]
+  addons                   Json?
+  addons_snapshot          Json?
+
+  @@index([workspace_id])
+  @@index([status])
+  @@index([is_current])
+  @@map("subscriptions")
+}
+
+model subscription_transactions {
+  id                  String   @id @default(uuid())
+  subscription_id     String
+  razorpay_payment_id String?  @unique
+  razorpay_order_id   String?
+  amount              Decimal
+  currency            String   @default("INR")
+  status              String // 'pending', 'success', 'failed', 'refunded'
+  payment_method      String
+  failure_reason      String?
+  metadata            Json
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  subscription subscriptions @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+
+  @@index([subscription_id])
+  @@index([status])
+  @@map("subscription_transactions")
 }

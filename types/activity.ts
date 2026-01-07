@@ -1,6 +1,5 @@
 import {
   createCommentSchema,
-  deleteCommentSchema,
   updateCommentSchema
 } from '@/validations/activity';
 import z from 'zod';
@@ -8,8 +7,6 @@ import z from 'zod';
 export type CreateCommentType = z.infer<typeof createCommentSchema>;
 
 export type UpdateCommentType = z.infer<typeof updateCommentSchema>;
-
-export type DeleteCommentType = z.infer<typeof deleteCommentSchema>;
 
 export interface CreateActivityLogInput {
   workspace_id: string;

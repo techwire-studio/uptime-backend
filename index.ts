@@ -6,6 +6,7 @@ import incidentRoutes from '@/routes/incident';
 import statusRoutes from '@/routes/status';
 import workspacesRoutes from '@/routes/workspace';
 import usersRoutes from '@/routes/user';
+import subscriptionRoutes from '@/routes/subscription';
 import logger from '@/utils/logger';
 import { errorHandler } from '@/middlewares/error';
 import { sendToQueue } from '@/services/queue';
@@ -38,6 +39,7 @@ app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/status', statusRoutes);
 app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/workspaces', workspacesRoutes);
+app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.get('/health', (_, response) => {
   sendSuccessResponse({
     response,
@@ -58,7 +60,7 @@ async function schedulerLoop() {
     } catch (err) {
       console.error('Scheduler error', err);
     }
-  }, 5000);
+  }, 30_000);
 }
 
 // (async () => {

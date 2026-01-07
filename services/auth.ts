@@ -1,6 +1,6 @@
 import { env } from '@/configs/env';
 import {
-  createWorkspaceWithMembers,
+  createWorkspaceOrAddUser,
   deleteUserAndRelatedData
 } from '@/controllers/workspace';
 import prisma from '@/prisma';
@@ -21,23 +21,22 @@ export const auth = betterAuth({
       if (ctx.path.startsWith('/sign-up')) {
         const session = ctx.context.newSession;
         if (session) {
-          await createWorkspaceWithMembers({
-            name: 'Workspace 1',
-            ownerId: session?.user.id as string,
-            userIds: [session?.user.id] as string[]
+          await createWorkspaceOrAddUser({
+            email: session.user.email as string,
+            userId: session?.user.id as string
           });
         }
       }
     })
   },
-  emailVerification: {
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: true,
-    async sendVerificationEmail({ user, token }) {
-      await sendEmailForVerification(user.email, token);
-    }
-  },
+  // emailVerification: {
+  //   sendOnSignUp: true,
+  //   sendOnSignIn: true,
+  //   autoSignInAfterVerification: true,
+  //   async sendVerificationEmail({ user, token }) {
+  //     await sendEmailForVerification(user.email, token);
+  //   }
+  // },
   user: {
     deleteUser: {
       enabled: true,
@@ -45,9 +44,9 @@ export const auth = betterAuth({
     }
   },
   emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: true,
-    autoSignInAfterVerification: true
+    enabled: true
+    // requireEmailVerification: true,
+    // autoSignInAfterVerification: true
   }
 });
 

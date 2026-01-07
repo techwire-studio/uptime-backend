@@ -97,8 +97,6 @@ export const getDomainExpiryDate = (domain: string): Promise<Date | null> => {
         return;
       }
 
-      console.log({ err, data });
-
       const patterns = [
         /Registry Expiry Date:\s*(.+)/i,
         /Registrar Registration Expiration Date:\s*(.+)/i,

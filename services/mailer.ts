@@ -1,4 +1,5 @@
 import { env } from '@/configs/env';
+import { WorkspaceMembersRole } from '@/types/workspace';
 import logger from '@/utils/logger';
 import nodemailer from 'nodemailer';
 
@@ -72,31 +73,64 @@ export const sendRecoveryAlertOnEmail = async (
   }
 };
 
-export const sendEmailForVerification = async (to: string, token: string) => {
-  const verificationUrl = `${env.CLIENT_URL}/verify-email?token=${token}`;
-  logger.info(`Sending email verification to ${to} with ${verificationUrl}`);
+export const sendInviteEmail = async (
+  to: string,
+  inviterName: string,
+  role: WorkspaceMembersRole
+) => {
+  const inviteUrl = `${env.CLIENT_URL}/accept-invite?email=${encodeURIComponent(to)}`;
+  logger.info(`Sending invite email to ${to} with ${inviteUrl}`);
+
+  let roleMessage = '';
+  let subject = '';
+
+  switch (role) {
+    case WorkspaceMembersRole.NOTIFY_ONLY:
+      subject = 'You have been added as a notify-only member';
+      roleMessage = `
+You have been added as a notify-only member. 
+You will receive alerts but no login is required.`;
+      break;
+    case WorkspaceMembersRole.READER:
+      subject = 'You have been invited as a Reader';
+      roleMessage = `
+You have been invited as a Reader. 
+You can log in, view projects, and monitor uptime.`;
+      break;
+    case WorkspaceMembersRole.EDITOR:
+      subject = 'You have been invited as an Editor';
+      roleMessage = `
+You have been invited as an Editor. 
+You can log in, manage projects, and collaborate with your team.`;
+      break;
+    default:
+      subject = 'You have been invited to join Uptime Alert';
+      roleMessage = '';
+  }
 
   try {
     const mailOptions = {
       from: `"Uptime Alert" <${process.env.GMAIL_USER}>`,
       to,
-      subject: 'Verify your email address',
+      subject,
       text: `
-        Email Verification
+Hi there,
 
-        Please verify your email address by clicking the link below:
+${inviterName} has invited you to join Uptime Alert.${roleMessage}
 
-        ${verificationUrl}
+Accept the invitation by clicking the link below:
 
-        If you did not create an account, you can safely ignore this email.
+${inviteUrl}
+
+If you were not expecting this invitation, you can safely ignore this email.
       `
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logger.info('Verification email sent successfully');
+    logger.info('Invite email sent successfully');
     return info;
   } catch (error) {
-    logger.info('Failed to send verification email');
-    throw new Error('Failed to send verification email');
+    logger.error('Failed to send invite email', error);
+    throw new Error('Failed to send invite email');
   }
 };

@@ -13,7 +13,6 @@ import {
   UpdateMonitorSchemaType
 } from '@/types/monitor';
 import { AlertServicesEnum } from '@/types/alert';
-import { getWorkspaceByUserId } from '@/controllers/workspace';
 import {
   getDomainExpiryDate,
   getSSLCertificateExpiry
@@ -27,129 +26,196 @@ export const createNewMonitor: RequestHandler = catchAsync(
   async (request: Request, response: Response) => {
     const payloads = request.body as CreateMonitorSchemaType;
 
-    const workspace = await getWorkspaceByUserId(request.userId);
-    const wsId = workspace[0]?.id;
-
-    if (!wsId) {
-      return sendErrorResponse({
-        response,
-        message: 'User does not belong to any workspace'
-      });
-    }
-
     try {
-      const createdMonitorId = await prisma.$transaction(async (tx) => {
-        const monitors = await Promise.all(
-          payloads.map(async (payload) => {
-            const monitor = await tx.monitors.create({
-              data: {
-                workspace_id: wsId,
-                name: payload.name || payload.url!,
-                url: payload.url,
-                type: payload.type,
-                interval_seconds: payload.interval_seconds || 60,
-                timeout_ms: 5000,
-                records: payload?.records ?? [],
-                port: payload?.port || null,
-                check_ssl_errors: payload.check_ssl_errors || false,
-                domain_expiry_reminders:
-                  payload.domain_expiry_reminders || false,
-                ssl_expiry_reminders: payload.ssl_expiry_reminders || false,
-                grace_period: payload?.grace_period || 300,
-                keyword_match_type: payload?.keyword_match_type || null,
-                keyword: payload?.keyword || null,
-                expected_status: [200],
-                check_regions: 'us-east-1',
-                status: MonitorOverallStatus.PREPARING,
-                next_run_at: new Date(
-                  Date.now() + (payload.interval_seconds || 60) * 1000
-                ),
-                is_active: true,
-                consecutive_failures: 0,
-                max_retries: 0,
-                ...(payload.tags?.length
-                  ? {
-                      tags: {
-                        create: payload.tags.map((tagName) => ({
-                          tag: {
-                            connectOrCreate: {
-                              where: {
-                                workspace_id_name: {
-                                  workspace_id: wsId,
-                                  name: tagName
-                                }
-                              },
-                              create: {
-                                workspace_id: wsId,
-                                name: tagName
-                              }
-                            }
-                          }
-                        }))
-                      }
-                    }
-                  : {})
+      const createdMonitorId = await prisma.$transaction(
+        async (tx) => {
+          const workspaceId = payloads?.[0]?.workspace_id!;
+
+          const allTagNames = [
+            ...new Set(payloads.flatMap((p) => p.tags ?? []))
+          ];
+
+          if (allTagNames.length) {
+            const existingTags = await tx.tags.findMany({
+              where: {
+                workspace_id: workspaceId,
+                name: { in: allTagNames }
               },
-              select: { id: true }
+              select: { id: true, name: true }
             });
 
-            return monitor;
-          })
-        );
+            const existingTagNames = new Set(existingTags.map((t) => t.name));
 
-        const shouldSetupEmailAlert = payloads.some(
-          (payload) => payload?.alert_channels?.email
-        );
+            const missingTags = allTagNames.filter(
+              (name) => !existingTagNames.has(name)
+            );
 
-        if (shouldSetupEmailAlert) {
-          await tx.alert_rules.upsert({
-            where: {
-              workspace_id_alert_type: {
-                workspace_id: wsId,
-                alert_type: AlertServicesEnum.EMAIL
-              }
-            },
-            update: {
-              enabled: true,
-              events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
-            },
-            create: {
-              workspace_id: wsId,
-              alert_type: AlertServicesEnum.EMAIL,
-              enabled: true,
-              events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+            if (missingTags.length) {
+              await tx.tags.createMany({
+                data: missingTags.map((name) => ({
+                  workspace_id: workspaceId,
+                  name
+                }))
+              });
             }
-          });
+          }
 
-          await tx.alert_channels.upsert({
-            where: {
-              workspace_id_type_destination: {
-                workspace_id: wsId,
-                type: AlertServicesEnum.EMAIL,
-                destination: JSON.stringify({ email: request.email })
-              }
-            },
-            update: {
-              destination: JSON.stringify({ email: request.email })
-            },
-            create: {
-              workspace_id: wsId,
-              type: AlertServicesEnum.EMAIL,
-              destination: JSON.stringify({ email: request.email })
+          const monitors = await Promise.all(
+            payloads.map(async (payload) => {
+              const monitor = await tx.monitors.create({
+                data: {
+                  workspace_id: payload?.workspace_id,
+                  name: payload?.name || payload?.url!,
+                  url: payload?.url,
+                  type: payload?.type,
+                  interval_seconds: payload?.interval_seconds || 60,
+                  timeout_ms: payload.timeout_ms || 5000,
+                  records: payload?.records ?? [],
+                  port: payload?.port || null,
+                  check_ssl_errors: payload?.check_ssl_errors || false,
+                  domain_expiry_reminders:
+                    payload?.domain_expiry_reminders || false,
+                  ssl_expiry_reminders: payload?.ssl_expiry_reminders || false,
+                  grace_period: payload?.grace_period || 300,
+                  keyword_match_type: payload?.keyword_match_type || null,
+                  keyword: payload?.keyword || null,
+                  expected_status: [200],
+                  check_regions: 'us-east-1',
+                  status: MonitorOverallStatus.PREPARING,
+                  next_run_at: new Date(
+                    Date.now() + (payload?.interval_seconds || 60) * 1000
+                  ),
+                  is_active: true,
+                  consecutive_failures: 0,
+                  max_retries: 0,
+                  ...(payload?.tags?.length
+                    ? {
+                        tags: {
+                          create: [...new Set(payload.tags)].map((tagName) => ({
+                            tag: {
+                              connect: {
+                                workspace_id_name: {
+                                  workspace_id: payload.workspace_id,
+                                  name: tagName
+                                }
+                              }
+                            }
+                          }))
+                        }
+                      }
+                    : {})
+                },
+                select: { id: true }
+              });
+
+              return monitor;
+            })
+          );
+
+          const alertRecipients = payloads
+            .flatMap((p) => p.alert_channels ?? [])
+            .filter(Boolean);
+
+          for (const recipient of alertRecipients) {
+            if (recipient.email) {
+              await tx.alert_rules.upsert({
+                where: {
+                  workspace_id_alert_type: {
+                    workspace_id: workspaceId,
+                    alert_type: AlertServicesEnum.EMAIL
+                  }
+                },
+                update: {
+                  enabled: true,
+                  events: [
+                    MonitorNotifyEventEnum.UP,
+                    MonitorNotifyEventEnum.DOWN
+                  ]
+                },
+                create: {
+                  workspace_id: workspaceId,
+                  alert_type: AlertServicesEnum.EMAIL,
+                  enabled: true,
+                  events: [
+                    MonitorNotifyEventEnum.UP,
+                    MonitorNotifyEventEnum.DOWN
+                  ]
+                }
+              });
+
+              await tx.alert_channels.upsert({
+                where: {
+                  workspace_id_type_destination: {
+                    workspace_id: workspaceId,
+                    type: AlertServicesEnum.EMAIL,
+                    destination: JSON.stringify({ email: recipient.email })
+                  }
+                },
+                update: {},
+                create: {
+                  workspace_id: workspaceId,
+                  type: AlertServicesEnum.EMAIL,
+                  destination: JSON.stringify({ email: recipient.email })
+                }
+              });
             }
-          });
-        }
 
-        return payloads.length === 1 ? monitors[0]?.id : null;
-      });
+            if (recipient.number) {
+              await tx.alert_rules.upsert({
+                where: {
+                  workspace_id_alert_type: {
+                    workspace_id: workspaceId,
+                    alert_type: AlertServicesEnum.SMS
+                  }
+                },
+                update: {
+                  enabled: true,
+                  events: [
+                    MonitorNotifyEventEnum.UP,
+                    MonitorNotifyEventEnum.DOWN
+                  ]
+                },
+                create: {
+                  workspace_id: workspaceId,
+                  alert_type: AlertServicesEnum.SMS,
+                  enabled: true,
+                  events: [
+                    MonitorNotifyEventEnum.UP,
+                    MonitorNotifyEventEnum.DOWN
+                  ]
+                }
+              });
+
+              await tx.alert_channels.upsert({
+                where: {
+                  workspace_id_type_destination: {
+                    workspace_id: workspaceId,
+                    type: AlertServicesEnum.SMS,
+                    destination: JSON.stringify({ number: recipient.number })
+                  }
+                },
+                update: {},
+                create: {
+                  workspace_id: workspaceId,
+                  type: AlertServicesEnum.SMS,
+                  destination: JSON.stringify({ number: recipient.number })
+                }
+              });
+            }
+          }
+
+          return payloads.length === 1 ? monitors[0]?.id : null;
+        },
+        { timeout: 20000 }
+      );
 
       sendSuccessResponse({
         response,
         data: { id: createdMonitorId },
         message: 'Monitors created successfully'
       });
-    } catch {
-      return sendErrorResponse({
+    } catch (error) {
+      sendErrorResponse({
         response,
         message: 'Failed to create monitors'
       });

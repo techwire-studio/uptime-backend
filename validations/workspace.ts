@@ -1,3 +1,4 @@
+import { WorkspaceMembersRole } from '@/types/workspace';
 import { z } from 'zod';
 
 const EventsSchema = z
@@ -70,3 +71,13 @@ export const updateTagsSchema = z.object({
   addedTags: z.array(z.string().trim().min(1)).default([]),
   removedTags: z.array(z.string().trim().min(1)).default([])
 });
+
+export const inviteWorkspaceMemberSchema = z.object({
+  email: z.string().trim().email(),
+  role: z.enum(WorkspaceMembersRole, { error: ' Invalid role specified' }),
+  countryCode: z.string().trim().optional(),
+  phoneNumber: z.string().trim().optional()
+});
+
+export const updateWorkspaceMemberSchema =
+  inviteWorkspaceMemberSchema.partial();

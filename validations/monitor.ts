@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const monitorSchema = z.object({
   type: z.string(),
+  workspace_id: z.string().uuid().min(1, 'Workspace ID is required'),
   name: z.string().trim().min(1, 'Name is required').nullable(),
   url: z.string().trim().nullable(),
   tags: z.array(z.string().trim()).default([]),
@@ -32,14 +33,16 @@ export const monitorSchema = z.object({
   check_ssl_errors: z.boolean().default(false),
   ssl_expiry_reminders: z.boolean().default(false),
   domain_expiry_reminders: z.boolean().default(false),
-  alert_channels: z
-    .object({
-      email: z.boolean().default(true),
-      sms: z.boolean().default(false),
-      voice: z.boolean().default(false),
-      push: z.boolean().default(false)
-    })
-    .default({ email: true, sms: false, voice: false, push: false })
+  alert_channels: z.array(
+    z
+      .object({
+        email: z.string().email().optional(),
+        number: z.string().optional()
+      })
+      .refine((data) => data.email || data.number, {
+        message: 'Either email or number must be provided'
+      })
+  )
 });
 
 export const createMonitorSchema = z.array(monitorSchema);

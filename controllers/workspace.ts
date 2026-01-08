@@ -301,6 +301,9 @@ export const getWorkspaceByUserId = async (userId: string) => {
     select: {
       id: true,
       name: true,
+      members: {
+        select: { user_id: true, role: true }
+      },
       billing_details: true,
       subscription: {
         where: { status: 'active' },
@@ -753,6 +756,58 @@ export const deleteWorkspaceMember: RequestHandler = catchAsync(
       response,
       data: null,
       message: 'Workspace member removed successfully'
+    });
+  }
+);
+
+/**
+ * @route PUT /workspaces/:workspaceId/integrations/:channelId
+ * @description Update an existing alert channel for a workspace
+ */
+export const updateAlertChannel: RequestHandler = catchAsync(
+  async (request, response) => {
+    const { workspaceId, channelId } = request.params;
+
+    if (!workspaceId || !channelId) {
+      return sendErrorResponse({
+        response,
+        message: 'Workspace ID and Channel ID are required'
+      });
+    }
+
+    const { type, config, events } = request.body as CreateAlertChannelType;
+
+    const updatedChannel = await prisma.alert_channels.update({
+      where: { id: channelId },
+      data: {
+        type,
+        destination: JSON.stringify(config)
+      }
+    });
+
+    await prisma.alert_rules.upsert({
+      where: {
+        workspace_id_alert_type: {
+          workspace_id: workspaceId,
+          alert_type: type
+        }
+      },
+      update: {
+        enabled: true,
+        events: events
+      },
+      create: {
+        workspace_id: workspaceId,
+        alert_type: type,
+        enabled: true,
+        events: events
+      }
+    });
+
+    sendSuccessResponse({
+      response,
+      data: updatedChannel,
+      message: 'Alert channel updated successfully'
     });
   }
 );

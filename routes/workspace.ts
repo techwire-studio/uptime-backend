@@ -19,7 +19,8 @@ import {
   getWorkspaceMembers,
   deleteWorkspaceMember,
   inviteTeamMember,
-  updateWorkspaceMember
+  updateWorkspaceMember,
+  updateAlertChannel
 } from '@/controllers/workspace';
 import { authenticationMiddleware } from '@/middlewares/auth';
 import { validateRequestPayload } from '@/middlewares/validation';
@@ -74,7 +75,8 @@ router
 router
   .route('/:workspaceId/integrations')
   .get(getAlertChannels)
-  .post(validateRequestPayload(createAlertChannelSchema), createAlertChannels);
+  .post(validateRequestPayload(createAlertChannelSchema), createAlertChannels)
+  .put(validateRequestPayload(createAlertChannelSchema), updateAlertChannel);
 router.get('/:workspaceId/rules', getAlertRules);
 router.patch('/alert-rules/:ruleId', updateAlertRule);
 router.get('/:workspaceId/activity-logs/:entityId', getActivityLogsByEntity);

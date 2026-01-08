@@ -6,7 +6,7 @@ import amqplib, { type ChannelModel, type Channel } from 'amqplib';
 let connectionInstance: ChannelModel | undefined;
 let channelInstance: Channel | undefined;
 
-export const initializeQueue = async (): Promise<Channel> => {
+const initializeQueue = async (): Promise<Channel> => {
   if (channelInstance) return channelInstance;
 
   try {

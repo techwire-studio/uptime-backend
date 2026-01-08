@@ -25,6 +25,7 @@ import { runPingMonitor } from '@/services/pingCheck';
 import { runPortMonitor } from '@/services/portCheck';
 import { runHeartbeatMonitor } from '@/services/heartbeat';
 import { createActivityLog } from '@/controllers/activity';
+import { sendToProvider } from '@/services/integrations';
 
 export const startWorker = async (): Promise<void> => {
   const queueName = 'monitor_checks_queue';
@@ -169,11 +170,34 @@ export const startWorker = async (): Promise<void> => {
             }
 
             if (channel.type === AlertServicesEnum.WHATSAPP) {
-              // await sendFailureAlertOnWhatsApp(
-              //   channel.destination,
-              //   `Monitor DOWN: ${monitor.url}`,
-              //   activeIncident.started_at
-              // );
+              // sendFailureAlertOnWhatsApp(channel.destination, `Monitor DOWN: ${monitor.url}`, activeIncident.started_at);
+            }
+
+            if (
+              channel.type !== AlertServicesEnum.EMAIL &&
+              channel.type !== AlertServicesEnum.SMS
+            ) {
+              // try {
+              //   const credentials = JSON.parse(channel.destination);
+              //   await sendToProvider({
+              //     providerId: channel.type,
+              //     credentials,
+              //     event: 'failure',
+              //     message: `Monitor DOWN: ${monitor.url}`
+              //   });
+              //   await createActivityLog({
+              //     workspace_id: monitor.workspace_id,
+              //     action: 'alert.integration_sent',
+              //     entity_type: 'alert',
+              //     entity_id: activeIncident.id,
+              //     message: `Failure alert sent to integration provider ${credentials.provider_id}`,
+              //     metadata: { monitor_id: monitor.id, channel_id: channel.id }
+              //   });
+              // } catch (err) {
+              //   logger.error('Failed to send alert to integration channel', {
+              //     error: err
+              //   });
+              // }
             }
 
             await prisma.alerts_sent.create({
@@ -236,12 +260,37 @@ export const startWorker = async (): Promise<void> => {
           }
 
           if (channel.type === AlertServicesEnum.WHATSAPP) {
-            // await sendRecoveryAlertOnWhatsApp(
-            //   channel.destination,
-            //   `Monitor RECOVERED: ${monitor.url}`,
-            //   resolvedAt
-            // );
+            // sendRecoveryAlertOnWhatsApp(channel.destination, `Monitor RECOVERED: ${monitor.url}`, resolvedAt);
           }
+
+          // if (
+          //   channel.type !== AlertServicesEnum.EMAIL &&
+          //   channel.type !== AlertServicesEnum.SMS
+          // ) {
+          //   try {
+          //     const credentials = JSON.parse(channel.destination);
+          //     await sendToProvider({
+          //       providerId: channel.type,
+          //       credentials,
+          //       event: 'recovery',
+          //       message: `Monitor RECOVERED: ${monitor.url}`
+          //     });
+
+          //     await createActivityLog({
+          //       workspace_id: monitor.workspace_id,
+          //       action: 'alert.integration_sent',
+          //       entity_type: 'alert',
+          //       entity_id: activeIncident.id,
+          //       message: `Recovery alert sent to integration provider ${credentials.provider_id}`,
+          //       metadata: { monitor_id: monitor.id, channel_id: channel.id }
+          //     });
+          //   } catch (err) {
+          //     logger.error(
+          //       'Failed to send recovery alert to integration channel',
+          //       { error: err }
+          //     );
+          //   }
+          // }
 
           await prisma.alerts_sent.create({
             data: {

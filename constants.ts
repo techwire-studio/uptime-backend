@@ -16,7 +16,20 @@ export const plans = [
       integrations_count: 5,
       full_featured_status_pages: false,
       notify_seats: 0,
-      login_seats: 0
+      login_seats: 0,
+      integrations: {
+        pagerduty: true,
+        zapier: true,
+        msteams: true,
+        mattermost: true,
+        webhook: true,
+        telegram: false,
+        slack: false,
+        pushover: true,
+        pushbullet: true,
+        discord: true,
+        googlechat: true
+      }
     },
     addons: []
   },
@@ -37,7 +50,20 @@ export const plans = [
       integrations_count: 9,
       full_featured_status_pages: false,
       notify_seats: 1,
-      login_seats: 0
+      login_seats: 0,
+      integrations: {
+        pagerduty: true,
+        zapier: true,
+        msteams: true,
+        mattermost: true,
+        webhook: true,
+        telegram: false,
+        slack: false,
+        pushover: true,
+        pushbullet: true,
+        discord: true,
+        googlechat: true
+      }
     },
     addons: [
       { name: 'Extra Monitor', type: 'quantity', price_per_unit: 10 },
@@ -66,7 +92,20 @@ export const plans = [
       integrations_count: 12,
       full_featured_status_pages: true,
       notify_seats: 3,
-      login_seats: 3
+      login_seats: 3,
+      integrations: {
+        pagerduty: true,
+        zapier: true,
+        msteams: true,
+        mattermost: true,
+        webhook: true,
+        telegram: false,
+        slack: false,
+        pushover: true,
+        pushbullet: true,
+        discord: true,
+        googlechat: true
+      }
     },
     addons: [
       { name: 'Extra Monitor', type: 'quantity', price_per_unit: 15 },
@@ -91,7 +130,20 @@ export const plans = [
       integrations_count: 12,
       full_featured_status_pages: true,
       notify_seats: 5,
-      login_seats: 5
+      login_seats: 5,
+      integrations: {
+        pagerduty: true,
+        zapier: true,
+        msteams: true,
+        mattermost: true,
+        webhook: true,
+        telegram: false,
+        slack: false,
+        pushover: true,
+        pushbullet: true,
+        discord: true,
+        googlechat: true
+      }
     },
     addons: [
       { name: 'Extra Monitor', type: 'quantity', price_per_unit: 50 },

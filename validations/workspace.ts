@@ -28,6 +28,10 @@ const PagerDutyConfigSchema = z.object({
   routing_key: z.string().trim().min(1)
 });
 
+const PushOverConfigSchema = z.object({
+  user_key: z.string().trim().min(1)
+});
+
 export const createAlertChannelSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('slack'),
@@ -62,6 +66,11 @@ export const createAlertChannelSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('pagerduty'),
     config: PagerDutyConfigSchema,
+    events: EventsSchema
+  }),
+  z.object({
+    type: z.literal('pushover'),
+    config: PushOverConfigSchema,
     events: EventsSchema
   })
 ]);

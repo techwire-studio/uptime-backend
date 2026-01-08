@@ -18,41 +18,38 @@ export const envSchema = z.object({
   BASE_URL: zURL(),
 
   // Database & Messaging
-  DATABASE_URL: zRequiredString('DATABASE_URL is required'),
-  RABBITMQ_URL: zRequiredString('RABBITMQ_URL is required'),
+  DATABASE_URL: zRequiredString('DATABASE_URL'),
+  RABBITMQ_URL: zRequiredString('RABBITMQ_URL'),
 
   // Gmail (Email alerts)
-  GMAIL_USER: zRequiredString('GMAIL_USER is required'),
-  GMAIL_PASS: zRequiredString('GMAIL_PASS is required'),
+  GMAIL_USER: zRequiredString('GMAIL_USER'),
+  GMAIL_PASS: zRequiredString('GMAIL_PASS'),
 
   // WhatsApp Business API
-  WHATSAPP_APP_ID: zRequiredString('WHATSAPP_APP_ID is required'),
-  WHATSAPP_APP_SECRET: zRequiredString('WHATSAPP_APP_SECRET is required'),
-  WHATSAPP_SYSTEM_USER_TOKEN: zRequiredString(
-    'WHATSAPP_SYSTEM_USER_TOKEN is required'
-  ),
-  WHATSAPP_VERSION: zRequiredString('WHATSAPP_VERSION is required'),
-  WHATSAPP_PHONE_NUMBER_ID: zRequiredString(
-    'WHATSAPP_PHONE_NUMBER_ID is required'
-  ),
+  WHATSAPP_APP_ID: zRequiredString('WHATSAPP_APP_ID'),
+  WHATSAPP_APP_SECRET: zRequiredString('WHATSAPP_APP_SECRET'),
+  WHATSAPP_SYSTEM_USER_TOKEN: zRequiredString('WHATSAPP_SYSTEM_USER_TOKEN'),
+  WHATSAPP_VERSION: zRequiredString('WHATSAPP_VERSION'),
+  WHATSAPP_PHONE_NUMBER_ID: zRequiredString('WHATSAPP_PHONE_NUMBER_ID'),
   WHATSAPP_RECIPIENT_TEST_NUMBER: zRequiredString(
-    'WHATSAPP_RECIPIENT_TEST_NUMBER is required'
+    'WHATSAPP_RECIPIENT_TEST_NUMBER'
   ),
 
   // Better Auth
-  BETTER_AUTH_SECRET: zRequiredString('  BETTER_AUTH_SECRET is required'),
+  BETTER_AUTH_SECRET: zRequiredString('  BETTER_AUTH_SECRET'),
 
   // AWS
-  AWS_ACCESS_KEY_ID: zRequiredString('AWS_ACCESS_KEY_ID is required'),
-  AWS_SECRET_ACCESS_KEY: zRequiredString('AWS_SECRET_ACCESS_KEY is required'),
-  AWS_REGION: zRequiredString('AWS_REGION is required'),
+  AWS_ACCESS_KEY_ID: zRequiredString('AWS_ACCESS_KEY_ID'),
+  AWS_SECRET_ACCESS_KEY: zRequiredString('AWS_SECRET_ACCESS_KEY'),
+  AWS_REGION: zRequiredString('AWS_REGION'),
 
   // Razorpay
-  RAZORPAY_KEY_ID: zRequiredString('RAZORPAY_KEY_ID is required'),
-  RAZORPAY_KEY_SECRET: zRequiredString('RAZORPAY_KEY_SECRET is required'),
-  RAZORPAY_WEBHOOK_SECRET: zRequiredString(
-    'RAZORPAY_WEBHOOK_SECRET is required'
-  )
+  RAZORPAY_KEY_ID: zRequiredString('RAZORPAY_KEY_ID'),
+  RAZORPAY_KEY_SECRET: zRequiredString('RAZORPAY_KEY_SECRET'),
+  RAZORPAY_WEBHOOK_SECRET: zRequiredString('RAZORPAY_WEBHOOK_SECRET'),
+
+  // Integrations
+  PUSH_OVER_APP_TOKEN: zRequiredString('PUSH_OVER_APP_TOKEN')
 });
 
 const createEnv = () => {

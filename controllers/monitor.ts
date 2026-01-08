@@ -402,6 +402,7 @@ export const updateMonitorById: RequestHandler = catchAsync(
       'records',
       'keyword',
       'keyword_match_type',
+      'name',
       'port',
       'check_regions',
       'ssl_expiry_reminders',

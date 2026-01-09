@@ -406,6 +406,7 @@ export const updateMonitorById: RequestHandler = catchAsync(
       'port',
       'check_regions',
       'ssl_expiry_reminders',
+      'alert_channels',
       'domain_expiry_reminders',
       'check_ssl_errors',
       'status',
@@ -415,7 +416,9 @@ export const updateMonitorById: RequestHandler = catchAsync(
     const updateData: Record<string, any> = {};
 
     for (const field of allowedFields) {
-      if (payload[field] !== undefined) updateData[field] = payload[field];
+      if (payload[field] !== undefined) {
+        updateData[field] = payload[field];
+      }
     }
 
     if (payload.interval_seconds) {
@@ -425,20 +428,26 @@ export const updateMonitorById: RequestHandler = catchAsync(
     }
 
     await prisma.$transaction(async (tx) => {
+      const monitor = await tx.monitors.findUnique({
+        where: { id },
+        select: { workspace_id: true }
+      });
+
+      if (!monitor) {
+        throw new Error('Monitor not found');
+      }
+
+      const workspaceId = monitor.workspace_id;
+
       if (payload.tags !== undefined) {
         await tx.monitor_tags.deleteMany({
           where: { monitor_id: id }
         });
 
         if (payload.tags.length > 0) {
-          const monitor = await tx.monitors.findUnique({
-            where: { id },
-            select: { workspace_id: true }
-          });
-
           const existingTags = await tx.tags.findMany({
             where: {
-              workspace_id: monitor!.workspace_id,
+              workspace_id: workspaceId,
               name: { in: payload.tags }
             }
           });
@@ -450,13 +459,13 @@ export const updateMonitorById: RequestHandler = catchAsync(
             await tx.tags.createMany({
               data: missing.map((name) => ({
                 name,
-                workspace_id: monitor!.workspace_id
+                workspace_id: workspaceId
               }))
             });
 
             const created = await tx.tags.findMany({
               where: {
-                workspace_id: monitor!.workspace_id,
+                workspace_id: workspaceId,
                 name: { in: missing }
               }
             });
@@ -470,6 +479,92 @@ export const updateMonitorById: RequestHandler = catchAsync(
               tag_id: tagMap.get(tag)!
             }))
           });
+        }
+      }
+
+      if (payload?.alert_channels?.length) {
+        for (const recipient of payload.alert_channels) {
+          if (recipient.email) {
+            await tx.alert_rules.upsert({
+              where: {
+                workspace_id_alert_type: {
+                  workspace_id: workspaceId,
+                  alert_type: AlertServicesEnum.EMAIL
+                }
+              },
+              update: {
+                enabled: true,
+                events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+              },
+              create: {
+                workspace_id: workspaceId,
+                alert_type: AlertServicesEnum.EMAIL,
+                enabled: true,
+                events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+              }
+            });
+
+            await tx.alert_channels.upsert({
+              where: {
+                workspace_id_type_destination: {
+                  workspace_id: workspaceId,
+                  type: AlertServicesEnum.EMAIL,
+                  destination: JSON.stringify({
+                    email: recipient.email
+                  })
+                }
+              },
+              update: {},
+              create: {
+                workspace_id: workspaceId,
+                type: AlertServicesEnum.EMAIL,
+                destination: JSON.stringify({
+                  email: recipient.email
+                })
+              }
+            });
+          }
+
+          if (recipient.number) {
+            await tx.alert_rules.upsert({
+              where: {
+                workspace_id_alert_type: {
+                  workspace_id: workspaceId,
+                  alert_type: AlertServicesEnum.SMS
+                }
+              },
+              update: {
+                enabled: true,
+                events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+              },
+              create: {
+                workspace_id: workspaceId,
+                alert_type: AlertServicesEnum.SMS,
+                enabled: true,
+                events: [MonitorNotifyEventEnum.UP, MonitorNotifyEventEnum.DOWN]
+              }
+            });
+
+            await tx.alert_channels.upsert({
+              where: {
+                workspace_id_type_destination: {
+                  workspace_id: workspaceId,
+                  type: AlertServicesEnum.SMS,
+                  destination: JSON.stringify({
+                    number: recipient.number
+                  })
+                }
+              },
+              update: {},
+              create: {
+                workspace_id: workspaceId,
+                type: AlertServicesEnum.SMS,
+                destination: JSON.stringify({
+                  number: recipient.number
+                })
+              }
+            });
+          }
         }
       }
 

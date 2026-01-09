@@ -63,10 +63,10 @@ async function schedulerLoop() {
   }, 30_000);
 }
 
-(async () => {
-  schedulerLoop();
-  startWorker();
-})();
+// (async () => {
+//   schedulerLoop();
+//   startWorker();
+// })();
 
 // Global Error Handler
 app.use(errorHandler);

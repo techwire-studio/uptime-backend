@@ -302,7 +302,22 @@ export const getWorkspaceByUserId = async (userId: string) => {
       id: true,
       name: true,
       members: {
-        select: { user_id: true, role: true }
+        select: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              userMetadata: {
+                select: {
+                  call_country_code: true,
+                  call_phone_number: true
+                }
+              }
+            }
+          },
+          role: true
+        }
       },
       billing_details: true,
       subscription: {

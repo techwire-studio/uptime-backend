@@ -114,6 +114,7 @@ model workspaces {
   tags                 tags[]
   incidentComments     incident_comments[]
   activityLogs         activity_logs[]
+  maintenance          maintenance?
 }
 
 // ----------------------------
@@ -424,4 +425,15 @@ model subscription_transactions {
   @@index([subscription_id])
   @@index([status])
   @@map("subscription_transactions")
+}
+
+model maintenance {
+  id           String   @id @default(uuid())
+  workspace_id String   @unique
+  project_ids  String[]
+  client_ids   String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }

@@ -49,7 +49,12 @@ export const envSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: zRequiredString('RAZORPAY_WEBHOOK_SECRET'),
 
   // Integrations
-  PUSH_OVER_APP_TOKEN: zRequiredString('PUSH_OVER_APP_TOKEN')
+  PUSH_OVER_APP_TOKEN: zRequiredString('PUSH_OVER_APP_TOKEN'),
+
+  // BRICKPAY
+  BRICKPAY_API_URL: zRequiredString('BRICKPAY_API_URL'),
+  BRICKYPAY_CLIENT_ID: zRequiredString('BRICKYPAY_CLIENT_ID'),
+  BRICKYPAY_CLIENT_SECRET: zRequiredString('BRICKYPAY_CLIENT_SECRET')
 });
 
 const createEnv = () => {

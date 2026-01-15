@@ -1,4 +1,7 @@
-import { WorkspaceMembersRole } from '@/types/workspace';
+import {
+  MaintenanceProjectStatus,
+  WorkspaceMembersRole
+} from '@/types/workspace';
 import { z } from 'zod';
 
 const EventsSchema = z
@@ -88,5 +91,27 @@ export const inviteWorkspaceMemberSchema = z.object({
   phoneNumber: z.string().trim().optional()
 });
 
-export const updateWorkspaceMemberSchema =
-  inviteWorkspaceMemberSchema.partial();
+export const updateWorkspaceMemberSchema = inviteWorkspaceMemberSchema
+  .partial()
+  .extend({
+    metadata: z.record(z.string(), z.string()).optional()
+  });
+
+export const createClientSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  password: z.string().min(1, 'Password is required').optional(),
+  role: z.string().min(1, 'Role is required').default('CLIENT'),
+  email: z.string().email('Invalid email address')
+});
+
+export const createMaintenanceSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  status: z.nativeEnum(MaintenanceProjectStatus),
+  clientId: z.string().min(1, 'Client is required'),
+  paymentLink: z.string().min(1, 'Payment Link is required'),
+  dueAmount: z
+    .number({ error: 'Due Amount must be a number' })
+    .nonnegative('Due Amount cannot be negative')
+    .optional()
+});

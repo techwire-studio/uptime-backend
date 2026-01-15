@@ -1,5 +1,11 @@
 import { getActivityLogsByEntity } from '@/controllers/activity';
 import { getWorkspaceIncidents } from '@/controllers/incident';
+import {
+  createClient,
+  createMaintenance,
+  getWorkspaceMaintenance,
+  getWorkspaceMaintenanceClients
+} from '@/controllers/maintenance';
 import { getWorkspaceMonitors } from '@/controllers/monitor';
 import { getWorkspaceStatusPages } from '@/controllers/status';
 import {
@@ -30,6 +36,8 @@ import {
 } from '@/validations/subscription';
 import {
   createAlertChannelSchema,
+  createClientSchema,
+  createMaintenanceSchema,
   inviteWorkspaceMemberSchema,
   updateTagsSchema,
   updateWorkspaceMemberSchema
@@ -45,13 +53,25 @@ router.get('/:workspaceId/incidents', getWorkspaceIncidents);
 router.get('/:workspaceId/subscription', getSubscriptionStatus);
 router.get('/:workspaceId/invoices', getWorkspaceSubscriptionInvoices);
 router.get('/:workspaceId/status-pages', getWorkspaceStatusPages);
+router.get('/:workspaceId/maintenance', getWorkspaceMaintenance);
+router.get('/:workspaceId/maintenance-clients', getWorkspaceMaintenanceClients);
 router.get('/:userId', getUserWorkspaces);
 router.get('/:workspaceId/members', getWorkspaceMembers);
 router.delete('/:workspaceId/members/:memberId', deleteWorkspaceMember);
 router.post(
+  '/:workspaceId/create-maintenance',
+  validateRequestPayload(createMaintenanceSchema),
+  createMaintenance
+);
+router.post(
   '/:workspaceId/subscriptions',
   validateRequestPayload(createSubscriptionSchema),
   createSubscription
+);
+router.post(
+  '/:workspaceId/create-client',
+  validateRequestPayload(createClientSchema),
+  createClient
 );
 router.post(
   '/:workspaceId/invite',

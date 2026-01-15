@@ -1,5 +1,6 @@
 import {
   createAlertChannelSchema,
+  createClientSchema,
   inviteWorkspaceMemberSchema,
   updateTagsSchema,
   updateWorkspaceMemberSchema
@@ -25,3 +26,12 @@ export type InviteWorkspaceMemberType = z.infer<
 export type UpdateWorkspaceMemberType = z.infer<
   typeof updateWorkspaceMemberSchema
 >;
+
+export enum MaintenanceProjectStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  ON_HOLD = 'ON_HOLD'
+}
+
+export type CreateClientType = z.infer<typeof createClientSchema>;

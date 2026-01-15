@@ -316,6 +316,7 @@ export const getWorkspaceByUserId = async (userId: string) => {
               }
             }
           },
+          metadata: true,
           role: true
         }
       },
@@ -694,17 +695,20 @@ export const updateWorkspaceMember: RequestHandler = catchAsync(
       }
     }
 
+    const updatedMetadata = {
+      ...(member.metadata ?? {}),
+      ...(payload.email && { email: payload.email }),
+      ...(payload.role && { role: payload.role }),
+      ...(payload.countryCode && { countryCode: payload.countryCode }),
+      ...(payload.phoneNumber && { phoneNumber: payload.phoneNumber }),
+      ...(payload.metadata && { ...payload.metadata })
+    };
+
     const updatedMember = await prisma.workspace_members.update({
       where: { id: member.id },
       data: {
         role: payload.role ?? member.role,
-        metadata: {
-          ...(member.metadata ?? {}),
-          ...(payload.email && { email: payload.email }),
-          ...(payload.role && { role: payload.role }),
-          ...(payload.countryCode && { countryCode: payload.countryCode }),
-          ...(payload.phoneNumber && { phoneNumber: payload.phoneNumber })
-        }
+        metadata: updatedMetadata
       }
     });
 

@@ -109,7 +109,7 @@ export const createMaintenanceSchema = z.object({
   description: z.string().optional(),
   status: z.nativeEnum(MaintenanceProjectStatus),
   clientId: z.string().min(1, 'Client is required'),
-  paymentLink: z.string().min(1, 'Payment Link is required'),
+  providerId: z.string().min(1, 'Provider is required'),
   dueAmount: z
     .number({ error: 'Due Amount must be a number' })
     .nonnegative('Due Amount cannot be negative')

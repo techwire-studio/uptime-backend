@@ -148,7 +148,14 @@ export const startWorker = async (): Promise<void> => {
 
           // ---- Send FAILURE Alert (ONLY ONCE) ----
           const channels = await prisma.alert_channels.findMany({
-            where: { workspace_id: monitor.workspace_id }
+            where: {
+              workspace_id: monitor.workspace_id,
+              monitors: {
+                some: {
+                  monitor_id: monitor.id
+                }
+              }
+            }
           });
 
           for (const channel of channels) {
@@ -238,7 +245,14 @@ export const startWorker = async (): Promise<void> => {
 
         // ---- Send RECOVERY Alert (ONLY ONCE) ----
         const channels = await prisma.alert_channels.findMany({
-          where: { workspace_id: monitor.workspace_id }
+          where: {
+            workspace_id: monitor.workspace_id,
+            monitors: {
+              some: {
+                monitor_id: monitor.id
+              }
+            }
+          }
         });
 
         for (const channel of channels) {

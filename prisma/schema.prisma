@@ -140,6 +140,7 @@ model monitors {
   id                      String    @id @default(uuid())
   workspace_id            String
   name                    String
+  group                   String
   url                     String?
   type                    String
   interval_seconds        Int       @default(60)
@@ -166,11 +167,12 @@ model monitors {
 
   workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
-  checks       monitor_checks[]
-  incidents    incidents[]
-  alerts_sent  alerts_sent[]
-  status_pages status_pages[]   @relation("StatusPageMonitors")
-  tags         monitor_tags[]
+  checks        monitor_checks[]
+  incidents     incidents[]
+  alerts_sent   alerts_sent[]
+  status_pages  status_pages[]           @relation("StatusPageMonitors")
+  tags          monitor_tags[]
+  alertChannels alert_channel_monitors[]
 
   @@index([workspace_id])
 }
@@ -268,16 +270,28 @@ model alert_rules {
 // ALERT CHANNELS
 // ----------------------------
 model alert_channels {
-  id           String        @id @default(uuid())
+  id           String                   @id @default(uuid())
   workspace_id String
   type         String
   destination  String
-  created_at   DateTime      @default(now())
-  updated_at   DateTime      @updatedAt
-  workspace    workspaces    @relation(fields: [workspace_id], references: [id])
+  created_at   DateTime                 @default(now())
+  updated_at   DateTime                 @updatedAt
+  workspace    workspaces               @relation(fields: [workspace_id], references: [id])
   alerts       alerts_sent[]
+  monitors     alert_channel_monitors[]
 
   @@unique([workspace_id, type, destination])
+}
+
+model alert_channel_monitors {
+  channel_id String
+  monitor_id String
+
+  channel alert_channels @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+  monitor monitors       @relation(fields: [monitor_id], references: [id], onDelete: Cascade)
+
+  @@id([channel_id, monitor_id])
+  @@index([monitor_id])
 }
 
 // ----------------------------

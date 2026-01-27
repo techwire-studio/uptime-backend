@@ -37,10 +37,7 @@ export const createNewMonitor: RequestHandler = catchAsync(
 
           if (allTagNames.length) {
             const existingTags = await tx.tags.findMany({
-              where: {
-                workspace_id: workspaceId,
-                name: { in: allTagNames }
-              },
+              where: { workspace_id: workspaceId, name: { in: allTagNames } },
               select: { id: true, name: true }
             });
 
@@ -66,10 +63,11 @@ export const createNewMonitor: RequestHandler = catchAsync(
                 data: {
                   workspace_id: payload?.workspace_id,
                   name: payload?.name || payload?.url!,
+                  group: payload?.group,
                   url: payload?.url,
                   type: payload?.type,
                   interval_seconds: payload?.interval_seconds || 60,
-                  timeout_ms: payload.timeout_ms || 5000,
+                  timeout_ms: payload?.timeout_ms || 5000,
                   records: payload?.records ?? [],
                   port: payload?.port || null,
                   check_ssl_errors: payload?.check_ssl_errors || false,
@@ -117,6 +115,7 @@ export const createNewMonitor: RequestHandler = catchAsync(
             .filter(Boolean);
 
           for (const recipient of alertRecipients) {
+            // -------- EMAIL --------
             if (recipient.email) {
               await tx.alert_rules.upsert({
                 where: {
@@ -143,7 +142,7 @@ export const createNewMonitor: RequestHandler = catchAsync(
                 }
               });
 
-              await tx.alert_channels.upsert({
+              const channel = await tx.alert_channels.upsert({
                 where: {
                   workspace_id_type_destination: {
                     workspace_id: workspaceId,
@@ -156,7 +155,16 @@ export const createNewMonitor: RequestHandler = catchAsync(
                   workspace_id: workspaceId,
                   type: AlertServicesEnum.EMAIL,
                   destination: JSON.stringify({ email: recipient.email })
-                }
+                },
+                select: { id: true }
+              });
+
+              await tx.alert_channel_monitors.createMany({
+                data: monitors.map((m) => ({
+                  channel_id: channel.id,
+                  monitor_id: m.id
+                })),
+                skipDuplicates: true
               });
             }
 
@@ -186,7 +194,7 @@ export const createNewMonitor: RequestHandler = catchAsync(
                 }
               });
 
-              await tx.alert_channels.upsert({
+              const channel = await tx.alert_channels.upsert({
                 where: {
                   workspace_id_type_destination: {
                     workspace_id: workspaceId,
@@ -199,7 +207,26 @@ export const createNewMonitor: RequestHandler = catchAsync(
                   workspace_id: workspaceId,
                   type: AlertServicesEnum.SMS,
                   destination: JSON.stringify({ number: recipient.number })
-                }
+                },
+                select: { id: true }
+              });
+
+              await tx.alert_channel_monitors.createMany({
+                data: monitors.map((m) => ({
+                  channel_id: channel.id,
+                  monitor_id: m.id
+                })),
+                skipDuplicates: true
+              });
+            }
+
+            if (recipient.integration_id) {
+              await tx.alert_channel_monitors.createMany({
+                data: monitors.map((m) => ({
+                  channel_id: recipient.integration_id as string,
+                  monitor_id: m.id
+                })),
+                skipDuplicates: true
               });
             }
           }
@@ -399,6 +426,7 @@ export const updateMonitorById: RequestHandler = catchAsync(
       'timeout_ms',
       'expected_status',
       'grace_period',
+      'group',
       'records',
       'keyword',
       'keyword_match_type',

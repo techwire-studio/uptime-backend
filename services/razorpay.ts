@@ -140,8 +140,7 @@ export const createRazorpaySubscriptionWithAddons = async (params: {
   try {
     const subscriptionParams: any = {
       plan_id: params.plan_id,
-      start_at: Math.floor(Date.now() / 1000) + 180,
-      end_at: Math.floor(new Date('2099-12-31').getTime() / 1000),
+      total_count: 12,
       quantity: params.quantity || 1,
       customer_notify: params.customer_notify ?? false,
       notes: params.notes || {}

@@ -6,6 +6,7 @@ export const monitorSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').nullable(),
   url: z.string().trim().nullable(),
   tags: z.array(z.string().trim()).default([]),
+  group: z.string().trim().min(1, 'Group is required'),
   interval_seconds: z
     .number()
     .int('Interval must be an integer')
@@ -37,10 +38,11 @@ export const monitorSchema = z.object({
     z
       .object({
         email: z.string().email().optional(),
-        number: z.string().optional()
+        number: z.string().optional(),
+        integration_id: z.string().uuid().optional()
       })
-      .refine((data) => data.email || data.number, {
-        message: 'Either email or number must be provided'
+      .refine((data) => data.email || data.number || data.integration_id, {
+        message: 'Either email, number, or integration_id must be provided'
       })
   )
 });

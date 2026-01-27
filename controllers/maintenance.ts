@@ -195,19 +195,14 @@ export const getWorkspaceMaintenanceClients: RequestHandler = catchAsync(
       where: { workspace_id: workspaceId }
     });
 
-    if (!maintenance) {
-      return sendSuccessResponse({
-        response,
-        message: 'No maintenance for this workspace',
-        data: []
-      });
-    }
-
-    if (!maintenance.client_ids || maintenance.client_ids.length === 0) {
+    if (!maintenance || !maintenance.client_ids?.length) {
       return sendSuccessResponse({
         response,
         message: 'No clients in maintenance for this workspace',
-        data: []
+        data: {
+          clients: [],
+          paymentProviders: []
+        }
       });
     }
 
@@ -227,25 +222,44 @@ export const getWorkspaceMaintenanceClients: RequestHandler = catchAsync(
     });
 
     const matchedMember = member?.members[0];
-
     const metadata = matchedMember?.metadata as Record<string, string>;
 
     const { access_token } = await exchangeCodeForToken(
       metadata.code as string
     );
 
-    const clients = await Promise.all(
-      maintenance.client_ids.map(async (clientId) => {
-        try {
-          const apiResponse = await fetch(
-            `${env.BRICKPAY_API_URL}/clients/${clientId}`,
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'authorization': `Bearer ${access_token}`
+    const [clientsResult, providersResult] = await Promise.all([
+      Promise.all(
+        maintenance.client_ids.map(async (clientId) => {
+          try {
+            const apiResponse = await fetch(
+              `${env.BRICKPAY_API_URL}/clients/${clientId}`,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'authorization': `Bearer ${access_token}`
+                }
               }
+            );
+
+            if (!apiResponse.ok) return null;
+
+            return apiResponse.json();
+          } catch {
+            return null;
+          }
+        })
+      ),
+
+      (async () => {
+        try {
+          const apiResponse = await fetch(`${env.BRICKPAY_API_URL}/providers`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'authorization': `Bearer ${access_token}`
             }
-          );
+          });
 
           if (!apiResponse.ok) return null;
 
@@ -253,15 +267,19 @@ export const getWorkspaceMaintenanceClients: RequestHandler = catchAsync(
         } catch {
           return null;
         }
-      })
-    );
+      })()
+    ]);
 
-    const filteredClients = clients.filter(Boolean);
+    const filteredClients = clientsResult.filter(Boolean);
 
     sendSuccessResponse({
       response,
-      message: 'Fetched workspace clients projects successfully',
-      data: filteredClients
+      message:
+        'Fetched workspace maintenance clients and payment providers successfully',
+      data: {
+        clients: filteredClients,
+        paymentProviders: providersResult ?? []
+      }
     });
   }
 );

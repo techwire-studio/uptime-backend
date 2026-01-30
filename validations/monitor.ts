@@ -32,8 +32,8 @@ export const monitorSchema = z.object({
   }),
   expected_status: z.array(z.enum(['2xx', '3xx', '4xx', '5xx'])),
   auth_type: z.enum(['none', 'basic', 'bearer']),
-  auth_username: z.string().optional(),
-  auth_password: z.string().optional(),
+  auth_username: z.string().optional().nullable(),
+  auth_password: z.string().optional().nullable(),
   http_method: z.enum([
     'HEAD',
     'GET',
@@ -43,7 +43,7 @@ export const monitorSchema = z.object({
     'DELETE',
     'OPTIONS'
   ]),
-  request_body: z.string().optional(),
+  request_body: z.string().optional().nullable(),
   send_json: z.boolean(),
   headers: z.json().nullable().optional(),
   check_regions: z.string().trim().nullable().optional(),

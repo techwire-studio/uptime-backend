@@ -1,5 +1,10 @@
+import type { subscriptions } from '@/prisma/generated/prisma/client';
 import { createSubscriptionSchema } from '@/validations/subscription';
 import z from 'zod';
+
+export type SubscriptionType = Omit<subscriptions, 'addons'> & {
+  addons: AddonsType[];
+};
 
 export type CreateSubscriptionParams = CreateSubscriptionType & {
   workspaceId: string;

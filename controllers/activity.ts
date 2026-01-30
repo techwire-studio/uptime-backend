@@ -1,5 +1,6 @@
 import { catchAsync } from '@/middlewares/error';
 import prisma from '@/prisma';
+import { Prisma } from '@/prisma/generated/prisma/client';
 import {
   CreateActivityLogInput,
   CreateCommentType,
@@ -216,7 +217,7 @@ export const createActivityLog = async (payload: CreateActivityLogInput) => {
       entity_id,
       actor_user_id,
       message,
-      ...(metadata && { metadata })
+      ...(metadata && { metadata: metadata as Prisma.InputJsonValue })
     }
   });
 };

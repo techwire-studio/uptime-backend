@@ -10,22 +10,22 @@ import {
   MonitorTypeEnum
 } from '@/types/monitor';
 import { env } from '@/configs/env';
-import {
-  sendIncidentAlertOnEmail,
-  sendRecoveryAlertOnEmail
-} from '@/services/mailer';
+// import {
+//   sendIncidentAlertOnEmail,
+//   sendRecoveryAlertOnEmail
+// } from '@/services/mailer';
 import { AlertServicesEnum, AlertTypesEnum } from '@/types/alert';
-import {
-  sendFailureAlertOnWhatsApp,
-  sendRecoveryAlertOnWhatsApp
-} from '@/services/messaging';
+// import {
+//   sendFailureAlertOnWhatsApp,
+//   sendRecoveryAlertOnWhatsApp
+// } from '@/services/messaging';
 import { runDnsMonitor } from '@/services/dnsCheck';
 import { runHttpMonitor } from '@/services/httpCheck';
 import { runPingMonitor } from '@/services/pingCheck';
 import { runPortMonitor } from '@/services/portCheck';
 import { runHeartbeatMonitor } from '@/services/heartbeat';
 import { createActivityLog } from '@/controllers/activity';
-import { sendToProvider } from '@/services/integrations';
+// import { sendToProvider } from '@/services/integrations';
 
 export const startWorker = async (): Promise<void> => {
   const queueName = 'monitor_checks_queue';

@@ -106,7 +106,7 @@ export const getDomainExpiryDate = (domain: string): Promise<Date | null> => {
       ];
 
       for (const pattern of patterns) {
-        const match = data.match(pattern);
+        const match = (data as string).match(pattern);
         if (match?.[1]) {
           const date = new Date(match[1].trim());
           if (!isNaN(date.getTime())) {

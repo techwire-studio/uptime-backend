@@ -9,9 +9,9 @@ import usersRoutes from '@/routes/user';
 import subscriptionRoutes from '@/routes/subscription';
 import logger from '@/utils/logger';
 import { errorHandler } from '@/middlewares/error';
-import { sendToQueue } from '@/services/queue';
-import { startWorker } from '@/services/worker';
-import { fetchAndLockDueMonitors } from '@/controllers/monitor';
+// import { sendToQueue } from '@/services/queue';
+// import { startWorker } from '@/services/worker';
+// import { fetchAndLockDueMonitors } from '@/controllers/monitor';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from '@/services/auth';
 import { sendSuccessResponse } from '@/utils/responseHandler';
@@ -51,17 +51,17 @@ app.get('/health', (_, response) => {
   });
 });
 
-async function schedulerLoop() {
-  setInterval(async () => {
-    try {
-      const monitors = await fetchAndLockDueMonitors();
+// async function schedulerLoop() {
+//   setInterval(async () => {
+//     try {
+//       const monitors = await fetchAndLockDueMonitors();
 
-      if (monitors.length > 0) await sendToQueue(monitors);
-    } catch (err) {
-      console.error('Scheduler error', err);
-    }
-  }, 30_000);
-}
+//       if (monitors.length > 0) await sendToQueue(monitors);
+//     } catch (err) {
+//       console.error('Scheduler error', err);
+//     }
+//   }, 30_000);
+// }
 
 // (async () => {
 //   schedulerLoop();

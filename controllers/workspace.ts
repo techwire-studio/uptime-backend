@@ -1,6 +1,6 @@
 import { catchAsync } from '@/middlewares/error';
 import prisma from '@/prisma';
-import { sendInviteEmail } from '@/services/mailer';
+// import { sendInviteEmail } from '@/services/mailer';
 import {
   CreateAlertChannelType,
   InviteWorkspaceMemberType,

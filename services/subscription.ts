@@ -9,7 +9,8 @@ import {
   AddonsType,
   BillingSnapshot,
   CreateSubscriptionParams,
-  CustomerContactDetails
+  CustomerContactDetails,
+  SubscriptionType
 } from '@/types/subscription';
 import logger from '@/utils/logger';
 
@@ -129,10 +130,7 @@ export async function findExistingActiveSubscription(workspaceId: string) {
  * Compare if subscription matches requested plan and addons
  */
 function doesSubscriptionMatch(
-  subscription: {
-    plan_id: string;
-    addons?: AddonsType[];
-  },
+  subscription: SubscriptionType,
   requestedPlanId: string,
   requestedAddons?: AddonsType[]
 ): boolean {
@@ -217,7 +215,11 @@ export async function createSubscription(params: CreateSubscriptionParams) {
     await findExistingActiveSubscription(workspaceId);
 
   if (existingSubscription) {
-    const matches = doesSubscriptionMatch(existingSubscription, planId, addons);
+    const matches = doesSubscriptionMatch(
+      existingSubscription as unknown as SubscriptionType,
+      planId,
+      addons
+    );
 
     if (matches && existingSubscription.razorpay_subscription_id) {
       const razorpaySub = await razorpay.subscriptions.fetch(
@@ -368,7 +370,13 @@ export async function createSubscription(params: CreateSubscriptionParams) {
       });
 
       if (existing) {
-        if (doesSubscriptionMatch(existing, planId, addons)) {
+        if (
+          doesSubscriptionMatch(
+            existing as unknown as SubscriptionType,
+            planId,
+            addons
+          )
+        ) {
           logger.info(
             `Another request created matching subscription, returning it`
           );

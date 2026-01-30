@@ -92,7 +92,7 @@ export const createNewMonitor: RequestHandler = catchAsync(
                   http_method: payload?.http_method ?? 'HEAD',
                   request_body: payload?.request_body ?? null,
                   send_json: payload?.send_json ?? false,
-                  headers: payload?.headers ?? null,
+                  ...(payload?.headers && { headers: payload?.headers }),
                   check_regions: 'us-east-1',
                   status: MonitorOverallStatus.PREPARING,
                   next_run_at: new Date(
@@ -1041,6 +1041,7 @@ export const testNotifications: RequestHandler = catchAsync(
                     channelType: notification.type
                   }
                 );
+                return undefined;
               }
           }
         })

@@ -16,7 +16,7 @@ export const sendIncidentAlertOnEmail = async (
   title: string,
   reportedAt: Date
 ) => {
-  logger.info(`Sending mail for incident at ${title}`);
+  logger.info(`Sending mail for incident at ${to}`);
 
   try {
     const mailOptions = {

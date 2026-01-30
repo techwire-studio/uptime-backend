@@ -123,8 +123,12 @@ export const startWorker = async (): Promise<void> => {
       if (!check.success) {
         logger.info('STEP 7A: Failure detected', { failureCount });
 
-        // Create new incident ONLY once (when reaching max retries)
-        if (reachedMaxRetries && !activeIncident) {
+        // Create new failure incident ONLY once (when reaching max retries)
+        if (
+          reachedMaxRetries &&
+          (!activeIncident ||
+            activeIncident.reason !== 'Max retry threshold reached')
+        ) {
           activeIncident = await prisma.incidents.create({
             data: {
               monitor_id: monitor.id,
@@ -146,15 +150,11 @@ export const startWorker = async (): Promise<void> => {
 
           logger.info('Incident created', { incidentId: activeIncident.id });
 
-          // ---- Send FAILURE Alert (ONLY ONCE) ----
+          // ---- Send FAILURE Alert ----
           const channels = await prisma.alert_channels.findMany({
             where: {
               workspace_id: monitor.workspace_id,
-              monitors: {
-                some: {
-                  monitor_id: monitor.id
-                }
-              }
+              monitors: { some: { monitor_id: monitor.id } }
             }
           });
 
@@ -223,6 +223,85 @@ export const startWorker = async (): Promise<void> => {
         }
       }
 
+      // ---------- SLOW RESPONSE SIDE ----------
+      if (monitor.slow_response_alert) {
+        const slowThreshold = monitor.slow_response_threshold_ms ?? 2000;
+
+        const isSlow =
+          check.response_time_ms != null &&
+          check.response_time_ms > slowThreshold;
+
+        if (isSlow) {
+          logger.info('STEP 7C: Slow response detected', {
+            responseTime: check.response_time_ms,
+            threshold: slowThreshold
+          });
+
+          // Only create a slow response incident if one doesn't exist or is not for slow response
+          if (
+            !activeIncident ||
+            activeIncident.reason !== 'Slow response time'
+          ) {
+            activeIncident = await prisma.incidents.create({
+              data: {
+                monitor_id: monitor.id,
+                check_id: checkRecord.id,
+                workspace_id: payload.workspace_id,
+                started_at: new Date(),
+                reason: `Slow response time: ${check.response_time_ms}ms (threshold: ${slowThreshold}ms)`
+              }
+            });
+
+            await createActivityLog({
+              workspace_id: monitor.workspace_id,
+              action: 'incident.created',
+              entity_type: 'incident',
+              entity_id: activeIncident.id,
+              message: `Slow response incident created for monitor ${monitor.name ?? monitor.url}`,
+              metadata: { monitor_id: monitor.id }
+            });
+
+            logger.info('Slow response incident created', {
+              incidentId: activeIncident.id
+            });
+
+            // ---- Send SLOW RESPONSE Alert ----
+            const channels = await prisma.alert_channels.findMany({
+              where: {
+                workspace_id: monitor.workspace_id,
+                monitors: { some: { monitor_id: monitor.id } }
+              }
+            });
+
+            for (const channel of channels) {
+              if (channel.type === AlertServicesEnum.EMAIL) {
+                await createActivityLog({
+                  workspace_id: monitor.workspace_id,
+                  action: 'alert.email_sent',
+                  entity_type: 'alert',
+                  entity_id: activeIncident.id,
+                  message: `Slow response alert email sent to ${JSON.parse(channel.destination)?.email}`,
+                  metadata: { monitor_id: monitor.id, channel_id: channel.id }
+                });
+              }
+
+              await prisma.alerts_sent.create({
+                data: {
+                  monitor_id: monitor.id,
+                  channel_id: channel.id,
+                  incident_id: activeIncident.id,
+                  alert_type: AlertTypesEnum.FAILURE,
+                  sent_at: new Date(),
+                  message: `Monitor slow response: ${check.response_time_ms}ms (threshold: ${slowThreshold}ms)`
+                }
+              });
+            }
+
+            logger.info('STEP 7C DONE: Slow response alert sent');
+          }
+        }
+      }
+
       // ---------- RECOVERY SIDE ----------
       if (check.success && activeIncident) {
         logger.info('STEP 7B: Recovery detected', {
@@ -243,15 +322,11 @@ export const startWorker = async (): Promise<void> => {
           }
         });
 
-        // ---- Send RECOVERY Alert (ONLY ONCE) ----
+        // ---- Send RECOVERY Alert ----
         const channels = await prisma.alert_channels.findMany({
           where: {
             workspace_id: monitor.workspace_id,
-            monitors: {
-              some: {
-                monitor_id: monitor.id
-              }
-            }
+            monitors: { some: { monitor_id: monitor.id } }
           }
         });
 
@@ -361,7 +436,8 @@ export const runMonitorCheck = async (
       return runHttpMonitor({
         url: monitor.url!,
         timeout_ms: monitor.timeout_ms,
-        expected_status: [200]
+        expected_status: monitor.expected_status,
+        headers: JSON.parse(monitor?.headers as unknown as string)
       });
 
     case MonitorTypeEnum.HEARTBEAT:
@@ -379,7 +455,7 @@ export const runMonitorCheck = async (
         timeout_ms: monitor.timeout_ms,
         keyword: monitor.keyword as string,
         keyword_match_type: monitor.keyword_match_type as KeywordConditionEnum,
-        expected_status: [200]
+        expected_status: monitor.expected_status
       });
 
     case MonitorTypeEnum.AI_SYNTHETIC:
@@ -388,14 +464,14 @@ export const runMonitorCheck = async (
         timeout_ms: monitor.timeout_ms,
         keyword: monitor.keyword as string,
         keyword_match_type: monitor.keyword_match_type as KeywordConditionEnum,
-        expected_status: [200]
+        expected_status: monitor.expected_status
       });
 
     case MonitorTypeEnum.AI_HEALTH_CHECK:
       return runHttpMonitor({
         url: monitor.url!,
         timeout_ms: monitor.timeout_ms,
-        expected_status: [200]
+        expected_status: monitor.expected_status
       });
 
     case MonitorTypeEnum.PING:

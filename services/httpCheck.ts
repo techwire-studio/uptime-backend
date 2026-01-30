@@ -17,7 +17,7 @@ export const runHttpMonitor = async (monitor: {
   keyword_match_type?: KeywordConditionEnum;
   method?: 'GET' | 'POST';
   body?: Record<string, string>;
-  expected_status?: number | number[];
+  expected_status?: string[];
   headers?: Record<string, string>;
 }): Promise<BaseMonitorCheckResult> => {
   const monitorUrl = new URL(monitor.url);
@@ -33,9 +33,14 @@ export const runHttpMonitor = async (monitor: {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
     'Accept': '*/*',
-    'Connection': 'close',
-    ...(monitor.headers ?? {})
+    'Connection': 'close'
   };
+
+  if (monitor.headers && typeof monitor.headers === 'object') {
+    for (const [key, value] of Object.entries(monitor.headers)) {
+      requestHeaders[key] = value;
+    }
+  }
 
   try {
     const dnsStart = performance.now();
@@ -92,13 +97,21 @@ export const runHttpMonitor = async (monitor: {
 
     let failed = false;
     let error_message: string | null = null;
-
     if (monitor.expected_status != null) {
       const expected = Array.isArray(monitor.expected_status)
         ? monitor.expected_status
         : [monitor.expected_status];
 
-      if (!expected.includes(response.status)) {
+      const statusMatched = expected.some((statusPattern) => {
+        if (typeof statusPattern === 'string' && statusPattern.endsWith('xx')) {
+          const prefix = parseInt(statusPattern.charAt(0), 10);
+          return Math.floor(response.status / 100) === prefix;
+        } else {
+          return response.status === Number(statusPattern);
+        }
+      });
+
+      if (!statusMatched) {
         failed = true;
         error_message = `Unexpected status ${response.status}`;
       }

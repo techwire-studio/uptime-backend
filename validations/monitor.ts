@@ -25,7 +25,27 @@ export const monitorSchema = z.object({
     .array()
     .optional()
     .nullable(),
-  expected_status: z.number().int().nullable().optional(),
+  follow_redirects: z.boolean(),
+  slow_response_alert: z.boolean(),
+  slow_response_threshold_ms: z.number().int().positive({
+    message: 'Threshold must be a positive number'
+  }),
+  expected_status: z.array(z.enum(['2xx', '3xx', '4xx', '5xx'])),
+  auth_type: z.enum(['none', 'basic', 'bearer']),
+  auth_username: z.string().optional(),
+  auth_password: z.string().optional(),
+  http_method: z.enum([
+    'HEAD',
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS'
+  ]),
+  request_body: z.string().optional(),
+  send_json: z.boolean(),
+  headers: z.json().nullable().optional(),
   check_regions: z.string().trim().nullable().optional(),
   grace_period: z.number().int().nullable().optional(),
   keyword: z.string().nullable().optional(),

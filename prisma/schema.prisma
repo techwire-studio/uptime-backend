@@ -137,33 +137,43 @@ model workspace_members {
 // MONITORS
 // ----------------------------
 model monitors {
-  id                      String    @id @default(uuid())
-  workspace_id            String
-  name                    String
-  group                   String
-  url                     String?
-  type                    String
-  interval_seconds        Int       @default(60)
-  timeout_ms              Int       @default(5000)
-  expected_status         Int[]
-  check_regions           String
-  status                  String    @default("healthy")
-  last_response_time_ms   Int?
-  last_checked_at         DateTime?
-  grace_period            Int?
-  next_run_at             DateTime
-  consecutive_failures    Int       @default(0)
-  records                 Json?
-  max_retries             Int       @default(0)
-  created_at              DateTime  @default(now())
-  updated_at              DateTime  @updatedAt
-  is_active               Boolean   @default(true)
-  keyword                 String?
-  keyword_match_type      String?
-  port                    Int?
-  check_ssl_errors        Boolean   @default(false)
-  ssl_expiry_reminders    Boolean   @default(false)
-  domain_expiry_reminders Boolean   @default(false)
+  id                         String    @id @default(uuid())
+  workspace_id               String
+  name                       String
+  group                      String
+  url                        String?
+  type                       String
+  interval_seconds           Int       @default(60)
+  timeout_ms                 Int       @default(5000)
+  expected_status            String[]
+  check_regions              String
+  status                     String    @default("healthy")
+  last_response_time_ms      Int?
+  last_checked_at            DateTime?
+  grace_period               Int?
+  next_run_at                DateTime
+  consecutive_failures       Int       @default(0)
+  records                    Json?
+  max_retries                Int       @default(0)
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
+  is_active                  Boolean   @default(true)
+  keyword                    String?
+  keyword_match_type         String?
+  port                       Int?
+  check_ssl_errors           Boolean   @default(false)
+  ssl_expiry_reminders       Boolean   @default(false)
+  domain_expiry_reminders    Boolean   @default(false)
+  follow_redirects           Boolean?  @default(true)
+  slow_response_alert        Boolean?  @default(false)
+  slow_response_threshold_ms Int?      @default(1000)
+  auth_type                  String?   @default("none")
+  auth_username              String?
+  auth_password              String?
+  http_method                String?   @default("HEAD")
+  request_body               String?
+  send_json                  Boolean?  @default(false)
+  headers                    Json?
 
   workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 

@@ -17,6 +17,10 @@ import {
   getDomainExpiryDate,
   getSSLCertificateExpiry
 } from '@/services/domainSSLMonitor';
+import { sendIncidentAlertOnEmail } from '@/services/mailer';
+import { sendFailureAlertOnWhatsApp } from '@/services/messaging';
+import { sendToProvider } from '@/services/integrations';
+import logger from '@/utils/logger';
 
 /**
  * @route POST /monitors
@@ -77,7 +81,18 @@ export const createNewMonitor: RequestHandler = catchAsync(
                   grace_period: payload?.grace_period || 300,
                   keyword_match_type: payload?.keyword_match_type || null,
                   keyword: payload?.keyword || null,
-                  expected_status: [200],
+                  expected_status: payload?.expected_status,
+                  follow_redirects: payload?.follow_redirects ?? true,
+                  slow_response_alert: payload?.slow_response_alert ?? false,
+                  slow_response_threshold_ms:
+                    payload?.slow_response_threshold_ms ?? 1000,
+                  auth_type: payload?.auth_type ?? 'none',
+                  auth_username: payload?.auth_username ?? null,
+                  auth_password: payload?.auth_password ?? null,
+                  http_method: payload?.http_method ?? 'HEAD',
+                  request_body: payload?.request_body ?? null,
+                  send_json: payload?.send_json ?? false,
+                  headers: payload?.headers ?? null,
                   check_regions: 'us-east-1',
                   status: MonitorOverallStatus.PREPARING,
                   next_run_at: new Date(
@@ -89,16 +104,18 @@ export const createNewMonitor: RequestHandler = catchAsync(
                   ...(payload?.tags?.length
                     ? {
                         tags: {
-                          create: [...new Set(payload.tags)].map((tagName) => ({
-                            tag: {
-                              connect: {
-                                workspace_id_name: {
-                                  workspace_id: payload.workspace_id,
-                                  name: tagName
+                          create: [...new Set(payload?.tags)].map(
+                            (tagName) => ({
+                              tag: {
+                                connect: {
+                                  workspace_id_name: {
+                                    workspace_id: payload?.workspace_id,
+                                    name: tagName
+                                  }
                                 }
                               }
-                            }
-                          }))
+                            })
+                          )
                         }
                       }
                     : {})
@@ -434,7 +451,6 @@ export const updateMonitorById: RequestHandler = catchAsync(
       'port',
       'check_regions',
       'ssl_expiry_reminders',
-      'alert_channels',
       'domain_expiry_reminders',
       'check_ssl_errors',
       'status',
@@ -449,9 +465,9 @@ export const updateMonitorById: RequestHandler = catchAsync(
       }
     }
 
-    if (payload.interval_seconds) {
+    if (payload?.interval_seconds) {
       updateData.next_run_at = new Date(
-        Date.now() + payload.interval_seconds * 1000
+        Date.now() + payload?.interval_seconds * 1000
       );
     }
 
@@ -467,21 +483,21 @@ export const updateMonitorById: RequestHandler = catchAsync(
 
       const workspaceId = monitor.workspace_id;
 
-      if (payload.tags !== undefined) {
+      if (payload?.tags !== undefined) {
         await tx.monitor_tags.deleteMany({
           where: { monitor_id: id }
         });
 
-        if (payload.tags.length > 0) {
+        if (payload?.tags.length > 0) {
           const existingTags = await tx.tags.findMany({
             where: {
               workspace_id: workspaceId,
-              name: { in: payload.tags }
+              name: { in: payload?.tags }
             }
           });
 
           const tagMap = new Map(existingTags.map((t) => [t.name, t.id]));
-          const missing = payload.tags.filter((t) => !tagMap.has(t));
+          const missing = payload?.tags.filter((t) => !tagMap.has(t));
 
           if (missing.length) {
             await tx.tags.createMany({
@@ -502,7 +518,7 @@ export const updateMonitorById: RequestHandler = catchAsync(
           }
 
           await tx.monitor_tags.createMany({
-            data: payload.tags.map((tag) => ({
+            data: payload?.tags.map((tag) => ({
               monitor_id: id,
               tag_id: tagMap.get(tag)!
             }))
@@ -511,7 +527,7 @@ export const updateMonitorById: RequestHandler = catchAsync(
       }
 
       if (payload?.alert_channels?.length) {
-        for (const recipient of payload.alert_channels) {
+        for (const recipient of payload?.alert_channels) {
           if (recipient.email) {
             await tx.alert_rules.upsert({
               where: {
@@ -938,5 +954,108 @@ export const getDomainAndSSL: RequestHandler = catchAsync(
       },
       message: 'Domain and SSL details fetched successfully'
     });
+  }
+);
+
+export const testNotifications: RequestHandler = catchAsync(
+  async (request: Request, response: Response) => {
+    const { workspace_id, monitor_id, send_to_user, send_to_integrations } =
+      request.body as {
+        workspace_id: string;
+        monitor_id: string;
+        send_to_integrations: boolean;
+        send_to_user: boolean;
+      };
+
+    try {
+      let typeFilter: any = undefined;
+
+      if (send_to_user && send_to_integrations) {
+        typeFilter = undefined; // get all
+      } else if (send_to_user) {
+        typeFilter = { in: [AlertServicesEnum.EMAIL, AlertServicesEnum.SMS] };
+      } else if (send_to_integrations) {
+        typeFilter = {
+          notIn: [AlertServicesEnum.EMAIL, AlertServicesEnum.SMS]
+        };
+      } else {
+        typeFilter = { in: [] };
+      }
+
+      const channels = await prisma.alert_channel_monitors.findMany({
+        where: {
+          monitor_id,
+          channel: {
+            workspace_id,
+            ...(typeFilter && { type: typeFilter })
+          }
+        },
+        include: {
+          channel: true
+        }
+      });
+
+      if (!channels.length) {
+        return sendErrorResponse({
+          response,
+          message: 'No alert channels connected to this monitor'
+        });
+      }
+
+      const testMessage = 'Test Notification';
+
+      await Promise.all(
+        channels.map(async (channel) => {
+          const notification = channel.channel;
+
+          switch (notification.type) {
+            case AlertServicesEnum.EMAIL:
+              return sendIncidentAlertOnEmail(
+                JSON.parse(notification.destination)?.email,
+                testMessage,
+                new Date()
+              );
+
+            case AlertServicesEnum.WHATSAPP:
+              return sendFailureAlertOnWhatsApp(
+                notification.destination,
+                testMessage,
+                new Date()
+              );
+
+            default:
+              try {
+                const credentials = JSON.parse(notification.destination);
+
+                return sendToProvider({
+                  providerId: notification.type,
+                  credentials,
+                  event: testMessage,
+                  message: testMessage
+                });
+              } catch (err) {
+                logger.error(
+                  'Failed to send test alert to integration notification',
+                  {
+                    error: err,
+                    channelType: notification.type
+                  }
+                );
+              }
+          }
+        })
+      );
+
+      sendSuccessResponse({
+        response,
+        data: null,
+        message: 'Test notification sent successfully'
+      });
+    } catch (error) {
+      sendErrorResponse({
+        response,
+        message: 'Failed to send test notification'
+      });
+    }
   }
 );

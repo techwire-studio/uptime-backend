@@ -8,7 +8,8 @@ import {
   getMonitorsBySelect,
   getChecks,
   updateHeartbeat,
-  getDomainAndSSL
+  getDomainAndSSL,
+  testNotifications
 } from '@/controllers/monitor';
 import { authenticationMiddleware } from '@/middlewares/auth';
 import { validateRequestPayload } from '@/middlewares/validation';
@@ -32,6 +33,7 @@ router.get('/:id/incidents', getIncidentByMonitorId);
 router.get('/:id/domain-ssl', getDomainAndSSL);
 router.post('/:monitorId/heartbeat', updateHeartbeat);
 router.post('/reset-stats', authenticationMiddleware, resetMonitorStats);
+router.post('/test-notification', authenticationMiddleware, testNotifications);
 router.patch(
   '/:id',
   authenticationMiddleware,

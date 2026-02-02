@@ -17,7 +17,9 @@ FROM base AS build
 COPY package*.json ./
 RUN npm ci
 
+
 COPY . .
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/db"
 RUN npx prisma generate
 RUN npm run build
 

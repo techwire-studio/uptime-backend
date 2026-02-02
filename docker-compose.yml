@@ -1,11 +1,29 @@
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: node-backend
+    restart: always
+    depends_on:
+      - rabbitmq
+    ports:
+      - '8000:8000'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://kalo:kalo@rabbitmq:5672
+    networks:
+      - app-network
+
   rabbitmq:
     image: rabbitmq:latest
     container_name: rabbitmq
     restart: always
     ports:
-      - 5672:5672
-      - 15672:15672
+      - '5672:5672'
+      - '15672:15672'
     environment:
       RABBITMQ_DEFAULT_USER: kalo
       RABBITMQ_DEFAULT_PASS: kalo
@@ -13,8 +31,10 @@ services:
       - source: rabbitmq-plugins
         target: /etc/rabbitmq/enabled_plugins
     volumes:
-      - rabbitmq-lib:/var/lib/rabbitmq/
+      - rabbitmq-lib:/var/lib/rabbitmq
       - rabbitmq-log:/var/log/rabbitmq
+    networks:
+      - app-network
 
 configs:
   rabbitmq-plugins:
@@ -22,6 +42,8 @@ configs:
 
 volumes:
   rabbitmq-lib:
-    driver: local
   rabbitmq-log:
-    driver: local
+
+networks:
+  app-network:
+    driver: bridge

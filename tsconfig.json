@@ -5,7 +5,7 @@
     "rootDir": ".",
     "outDir": "./dist",
     "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     // Path Aliases
     "paths": {
       "@/*": ["./*"],
@@ -22,10 +22,10 @@
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "ESNext",
+    "moduleResolution": "bundler",
     "target": "ESNext",
     "types": ["node"],
     "lib": ["ESNext"],
-    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
@@ -55,5 +55,9 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["./**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "scripts", "prisma"],
+  "tsc-alias": {
+    "resolveFullPaths": true,
+    "resolveFullExtension": ".js"
+  }
 }

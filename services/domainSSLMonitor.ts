@@ -1,5 +1,5 @@
 import tls from 'tls';
-import whois, { WhoisResult } from 'whois';
+import * as whois from 'whois';
 import { performance } from 'perf_hooks';
 
 export const runDomainSslMonitor = async (hostname: string) => {
@@ -11,7 +11,7 @@ export const runDomainSslMonitor = async (hostname: string) => {
 
   try {
     await new Promise<void>((resolve, reject) => {
-      whois.lookup(hostname, (err, data: string | WhoisResult[]) => {
+      whois.lookup(hostname, (err, data: string | whois.WhoisResult[]) => {
         if (err) return reject(err);
 
         const text =

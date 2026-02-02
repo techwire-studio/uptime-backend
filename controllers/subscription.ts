@@ -18,7 +18,7 @@ import { RequestHandler } from 'express';
 import logger from '@/utils/logger';
 import { CreateSubscriptionType } from '@/types/subscription';
 import { env } from '@/configs/env';
-import { validateWebhookSignature } from 'razorpay/dist/utils/razorpay-utils';
+import { validateWebhookSignature } from 'razorpay/dist/utils/razorpay-utils.js';
 
 /**
  * @route GET /subscriptions/plans

@@ -33,7 +33,7 @@ RUN addgroup -S nodejs -g 1001 \
 ENV NODE_ENV=production \
     NODE_OPTIONS="--no-warnings"
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package*.json ./
 

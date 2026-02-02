@@ -36,7 +36,7 @@ export const envSchema = z.object({
   ),
 
   // Better Auth
-  BETTER_AUTH_SECRET: zRequiredString('  BETTER_AUTH_SECRET'),
+  BETTER_AUTH_SECRET: zRequiredString('BETTER_AUTH_SECRET'),
 
   // AWS
   AWS_ACCESS_KEY_ID: zRequiredString('AWS_ACCESS_KEY_ID'),

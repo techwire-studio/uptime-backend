@@ -21,7 +21,7 @@ RUN npm ci
 
 COPY . .
 
-ENV PRISMA_QUERY_ENGINE_TYPE="node-api"
+ENV PRISMA_QUERY_ENGINE_TYPE=node-api
 ARG DATABASE_URL
 ENV DATABASE_URL=$DATABASE_URL
 
@@ -35,10 +35,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     NODE_OPTIONS="--no-warnings" \
-    PRISMA_QUERY_ENGINE_TYPE="node-api"
+    PRISMA_QUERY_ENGINE_TYPE=node-api
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/package*.json ./
 
 RUN chown -R nodejs:nodejs /app

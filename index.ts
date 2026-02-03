@@ -1,3 +1,4 @@
+import 'module-alias/register';
 import express from 'express';
 import { env } from '@/configs/env';
 import cors from 'cors';

@@ -55,7 +55,7 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["./**/*.ts"],
-  "exclude": ["node_modules", "dist", "scripts", "prisma"],
+  "exclude": ["node_modules", "dist", "scripts"],
   "tsc-alias": {
     "resolveFullPaths": true,
     "resolveFullExtension": ".js"

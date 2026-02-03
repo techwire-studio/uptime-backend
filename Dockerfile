@@ -29,8 +29,6 @@ RUN npx prisma generate
 
 RUN npm run build
 
-RUN cp -rn prisma/generated/* dist/prisma/generated/ || true
-
 FROM base AS production
 
 WORKDIR /app
@@ -40,14 +38,12 @@ ENV NODE_ENV=production \
     PRISMA_QUERY_ENGINE_TYPE="node-api"
 
 COPY --from=build /app/dist ./dist
-
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package*.json ./
-COPY prisma ./prisma
 
 RUN chown -R nodejs:nodejs /app
 USER nodejs
 
-CMD ["node", "dist/index.js"]
-
 EXPOSE 8000
+
+CMD ["node", "dist/index.js"]

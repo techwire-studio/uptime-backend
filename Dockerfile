@@ -38,7 +38,7 @@ ENV NODE_ENV=production \
     PRISMA_QUERY_ENGINE_TYPE="node-api"
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/package*.json ./
 
 RUN chown -R nodejs:nodejs /app

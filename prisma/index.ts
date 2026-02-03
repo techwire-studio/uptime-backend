@@ -1,10 +1,18 @@
-import 'dotenv/config';
-import { PrismaClient } from './generated/prisma/client';
-import { PrismaNeon } from '@prisma/adapter-neon';
-import { env } from '../configs/env';
+import { PrismaClient } from '@/prisma/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const adapter = new PrismaNeon({
+import { env } from '@/configs/env';
+
+const adapter = new PrismaPg({
   connectionString: env.DATABASE_URL
 });
 
-export default new PrismaClient({ adapter });
+const globalForPrisma = global as unknown as {
+  prisma: PrismaClient;
+};
+
+const prisma = globalForPrisma.prisma || new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
+export default prisma;

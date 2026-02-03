@@ -16,6 +16,10 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BASE_URL,
   trustedOrigins: [env.CLIENT_URL],
+  cookies: {
+    secure: false,
+    sameSite: 'lax'
+  },
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
       if (ctx.path.startsWith('/sign-up')) {

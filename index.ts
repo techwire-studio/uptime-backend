@@ -17,6 +17,7 @@ import { auth } from '@/services/auth';
 import { sendSuccessResponse } from '@/utils/responseHandler';
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = env.PORT || 8000;
 
 // Body Parser Middleware

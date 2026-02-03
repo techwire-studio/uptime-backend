@@ -20,6 +20,13 @@ export const auth = betterAuth({
     secure: false,
     sameSite: 'lax'
   },
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: 'none',
+      secure: true,
+      httpOnly: true
+    }
+  },
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
       if (ctx.path.startsWith('/sign-up')) {
